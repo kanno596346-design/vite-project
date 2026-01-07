@@ -1,132 +1,89 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <title>MIXTABLE Poker｜実験的な無料ポーカー</title>
+    <title>MIXTABLE Poker – Experimental Free Poker Games</title>
     <meta
       name="description"
-      content="MIXTABLE Poker は実験的（experimental）な無料のポーカーゲームです。現金・賞品・換金性は一切なく、動作や結果の保証もありません。ブラウザで今すぐ遊べます。"
+      content="MIXTABLE Poker is an experimental, free-to-play poker platform. No real money, no prizes, no guarantees. Play mixed poker variants directly in your browser."
     />
     <meta name="robots" content="index, follow" />
 
     <!-- hreflang -->
-    <link rel="alternate" href="/" hreflang="en" />
-    <link rel="alternate" href="/ja/" hreflang="ja" />
-    <link rel="alternate" href="/" hreflang="x-default" />
+    <link rel="alternate" href="https://mixtable.io/" hreflang="en" />
+    <link rel="alternate" href="https://mixtable.io/ja/" hreflang="ja" />
+    <link rel="alternate" href="https://mixtable.io/" hreflang="x-default" />
 
     <style>
       body {
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
         margin: 0;
-        padding: 0;
-        background: #0f172a;
-        color: #e5e7eb;
-        line-height: 1.7;
+        padding: 40px 20px;
+        background: #0f0f0f;
+        color: #f5f5f5;
       }
-      main {
-        max-width: 820px;
+      .wrap {
+        max-width: 900px;
         margin: 0 auto;
-        padding: 48px 20px;
-      }
-      header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 22px;
-      }
-      .lang a {
-        color: #93c5fd;
-        text-decoration: none;
-        font-size: 0.95rem;
       }
       h1 {
-        font-size: 2.1rem;
-        margin: 0;
+        font-size: 2.2rem;
+        margin-bottom: 0.5em;
       }
       p {
-        margin: 14px 0;
-        color: #cbd5f5;
-      }
-      .ctaRow {
-        display: flex;
-        gap: 12px;
-        flex-wrap: wrap;
-        margin-top: 22px;
-      }
-      .cta {
-        display: inline-block;
-        padding: 14px 18px;
-        border-radius: 12px;
-        text-decoration: none;
-        font-weight: 700;
-      }
-      .primary {
-        background: #22c55e;
-        color: #052e16;
-      }
-      .secondary {
-        background: rgba(148, 163, 184, 0.15);
-        color: #e5e7eb;
-        border: 1px solid rgba(148, 163, 184, 0.35);
-      }
-      .panel {
-        margin-top: 18px;
-        padding: 14px 14px;
-        border-radius: 12px;
-        background: rgba(148, 163, 184, 0.12);
-        border: 1px solid rgba(148, 163, 184, 0.25);
-        color: #cbd5f5;
-        font-size: 0.95rem;
+        line-height: 1.7;
+        color: #ccc;
       }
       .note {
-        margin-top: 28px;
-        font-size: 0.9rem;
-        color: #94a3b8;
+        margin-top: 20px;
+        padding: 14px;
+        background: #1c1c1c;
+        border-radius: 10px;
+        font-size: 0.95rem;
       }
-      ul {
-        margin: 10px 0 0 1.2em;
-        color: #cbd5f5;
+      .links {
+        margin-top: 30px;
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
       }
-      li {
-        margin: 6px 0;
+      a {
+        color: #5aa9ff;
+        text-decoration: none;
+        font-weight: 600;
+      }
+      a:hover {
+        text-decoration: underline;
       }
     </style>
   </head>
 
   <body>
-    <main>
-      <header>
-        <h1>MIXTABLE Poker</h1>
-        <div class="lang"><a href="/">English</a></div>
-      </header>
+    <div class="wrap">
+      <h1>MIXTABLE Poker</h1>
 
       <p>
-        MIXTABLE Poker は、ミックスゲーム（複数種のポーカー）をブラウザで手軽に遊べる
-        <strong>実験的（experimental）な無料ゲーム</strong>です。
+        MIXTABLE Poker is an experimental poker playground focused on mixed
+        games. It is free to play, browser-based, and designed for learning,
+        testing, and exploration.
       </p>
 
-      <div class="panel">
-        <strong>重要：</strong>
-        現金・賞品・換金性は一切ありません。動作や結果についての保証もありません（no guarantees）。
+      <p>
+        This site does <strong>not</strong> use real money. There are no prizes,
+        no deposits, and no guarantees. Everything here is purely experimental.
+      </p>
+
+      <div class="note">
+        ⚠️ Experimental / Free / No real money / No guarantees
       </div>
 
-      <div class="ctaRow">
-        <a class="cta primary" href="/poker/">▶ 今すぐ遊ぶ（/poker）</a>
-        <a class="cta secondary" href="/poker/#rules">ルールを見る</a>
+      <div class="links">
+        <a href="/poker/">▶ Play Poker</a>
+        <a href="/ja/">🇯🇵 日本語ページ</a>
       </div>
-
-      <p class="note">experimental / free / no guarantees ・ No real money</p>
-
-      <h2 style="margin-top: 34px; font-size: 1.35rem">このサイトについて</h2>
-      <ul>
-        <li>無料・登録不要（将来変更する場合は明記します）</li>
-        <li>実験的なため、予告なく仕様が変わることがあります</li>
-        <li>不具合や不正確な判定が起こる可能性があります</li>
-      </ul>
-    </main>
+    </div>
   </body>
 </html>
-
