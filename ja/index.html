@@ -1,89 +1,88 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<head>
+  <meta charset="UTF-8" />
+  <title>MIXTABLE Poker – Free Experimental Mixed Poker</title>
 
-    <title>MIXTABLE Poker – Experimental Free Poker Games</title>
-    <meta
-      name="description"
-      content="MIXTABLE Poker is an experimental, free-to-play poker platform. No real money, no prizes, no guarantees. Play mixed poker variants directly in your browser."
-    />
-    <meta name="robots" content="index, follow" />
+  <!-- SEO -->
+  <meta name="description" content="MIXTABLE is a free experimental mixed poker platform. Play various poker variants with bots. No real money, no guarantees." />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- hreflang -->
-    <link rel="alternate" href="https://mixtable.io/" hreflang="en" />
-    <link rel="alternate" href="https://mixtable.io/ja/" hreflang="ja" />
-    <link rel="alternate" href="https://mixtable.io/" hreflang="x-default" />
+  <!-- hreflang -->
+  <link rel="alternate" hreflang="en" href="https://mixtable.io/" />
+  <link rel="alternate" hreflang="ja" href="https://mixtable.io/ja/" />
+  <link rel="alternate" hreflang="x-default" href="https://mixtable.io/" />
 
-    <style>
-      body {
-        font-family: system-ui, -apple-system, BlinkMacSystemFont,
-          "Segoe UI", sans-serif;
-        margin: 0;
-        padding: 40px 20px;
-        background: #0f0f0f;
-        color: #f5f5f5;
-      }
-      .wrap {
-        max-width: 900px;
-        margin: 0 auto;
-      }
-      h1 {
-        font-size: 2.2rem;
-        margin-bottom: 0.5em;
-      }
-      p {
-        line-height: 1.7;
-        color: #ccc;
-      }
-      .note {
-        margin-top: 20px;
-        padding: 14px;
-        background: #1c1c1c;
-        border-radius: 10px;
-        font-size: 0.95rem;
-      }
-      .links {
-        margin-top: 30px;
-        display: flex;
-        gap: 16px;
-        flex-wrap: wrap;
-      }
-      a {
-        color: #5aa9ff;
-        text-decoration: none;
-        font-weight: 600;
-      }
-      a:hover {
-        text-decoration: underline;
-      }
-    </style>
-  </head>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      margin: 0;
+      padding: 40px;
+      text-align: center;
+    }
+    h1 {
+      font-size: 42px;
+      margin-bottom: 10px;
+    }
+    p {
+      max-width: 700px;
+      margin: 12px auto;
+      line-height: 1.6;
+      color: #cbd5f5;
+    }
+    .btn {
+      display: inline-block;
+      margin-top: 30px;
+      padding: 14px 28px;
+      background: #22c55e;
+      color: #022c22;
+      font-size: 18px;
+      font-weight: bold;
+      border-radius: 10px;
+      text-decoration: none;
+    }
+    .lang {
+      margin-top: 24px;
+      font-size: 14px;
+    }
+    .lang a {
+      color: #93c5fd;
+      text-decoration: none;
+      margin: 0 8px;
+    }
+    footer {
+      margin-top: 60px;
+      font-size: 13px;
+      color: #94a3b8;
+    }
+  </style>
+</head>
 
-  <body>
-    <div class="wrap">
-      <h1>MIXTABLE Poker</h1>
+<body>
+  <h1>MIXTABLE Poker</h1>
 
-      <p>
-        MIXTABLE Poker is an experimental poker playground focused on mixed
-        games. It is free to play, browser-based, and designed for learning,
-        testing, and exploration.
-      </p>
+  <p>
+    MIXTABLE is an experimental, free-to-play mixed poker platform.
+    You can play various poker variants against bots.
+  </p>
 
-      <p>
-        This site does <strong>not</strong> use real money. There are no prizes,
-        no deposits, and no guarantees. Everything here is purely experimental.
-      </p>
+  <p>
+    ⚠️ No real money. No guarantees. Just experimentation and fun.
+  </p>
 
-      <div class="note">
-        ⚠️ Experimental / Free / No real money / No guarantees
-      </div>
+  <a class="btn" href="/poker/">▶ Play Poker</a>
 
-      <div class="links">
-        <a href="/poker/">▶ Play Poker</a>
-        <a href="/ja/">🇯🇵 日本語ページ</a>
-      </div>
-    </div>
-  </body>
+  <div class="lang">
+    Language:
+    <a href="/">English</a> |
+    <a href="/ja/">日本語</a>
+  </div>
+
+  <footer>
+    © MIXTABLE – Experimental Poker Platform
+  </footer>
+</body>
 </html>
+<script type="module" src="/src/main.js"></script>
