@@ -247,6 +247,10 @@ $("btnClear")?.addEventListener("click", () => {
 });
 
 // 初期化（window.state作成）
-createInitialState();
-exposeToWindow();
-render();
+if (location.pathname.startsWith("/poker")) {
+  console.log("Poker mode detected");
+  createInitialState();
+  render();
+} else {
+  console.log("Landing page mode");
+}
