@@ -1,4 +1,6 @@
 // src/main.js
+import "./style.css";
+
 import { eval7, compareScore, handName } from "./handEval.js";
 import {
   createInitialState,
