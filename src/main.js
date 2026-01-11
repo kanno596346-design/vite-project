@@ -49,31 +49,45 @@ function seatLine(s) {
 
 function render() {
   const st = getState();
+  if (!st) return;
 
-  const conn = $("conn");
-  if (conn) conn.textContent = st ? "✅ window.state 接続OK" : "❌ window.state なし";
+  setApp(`
+    <div class="game">
+      <h2>MIXTABLE / ポーカー</h2>
 
-  const status = $("statusBox");
-  if (!status) return;
-  if (!st) {
-    status.textContent = "state がありません";
-    return;
-  }
+      <div class="controls">
+        <button id="btnStart">Start Hand</button>
+        <button id="btnCall">コール / チェック</button>
+        <button id="btnRaise">ミン・レイズ</button>
+        <button id="btnFold">フォールド</button>
+        <button id="btnShow">Showdown</button>
+        <button id="btnDump">ダンプ状態</button>
+        <button id="btnClear">ログ消去</button>
+      </div>
 
-  const board = Array.isArray(st.community) && st.community.length ? st.community.join(" ") : "(none)";
-  const toActName = st.seats?.[st.toAct]?.name ?? "-";
-  const maxB = Math.max(...st.seats.map((s) => s.bet || 0));
-  const myBet = st.seats?.[st.toAct]?.bet || 0;
-  const tc = Math.max(0, maxB - myBet);
+      <div class="panels">
+        <pre class="state">
+Hand #${st.handNo}
+Street: ${st.street}
+Pot: ${st.pot}
+Board: ${(st.community || []).join(" ")}
 
-  status.textContent =
-    `Hand #${st.handNo}\n` +
-    `Street: ${st.street}\n` +
-    `Pot: ${st.pot}\n` +
-    `Board: ${board}\n` +
-    `ToAct: ${toActName} (toCall=${tc})\n\n` +
-    st.seats.map(seatLine).join("\n");
+${st.seats.map(s =>
+  `Seat ${s.i} ${s.name}
+ stack=${s.stack}
+ bet=${s.bet}
+ inHand=${s.inHand}
+ folded=${s.folded}
+ hole=${(s.hole || []).join(" ")}`
+).join("\n\n")}
+        </pre>
+
+        <pre class="log" id="log"></pre>
+      </div>
+    </div>
+  `);
 }
+
 
 // -------- showdown (eval7) + payout --------
 function evalBest7(hole2, board5) {
@@ -143,7 +157,7 @@ function payout(st, result) {
 // -------- handlers --------
 function doStartHand() {
   clearLog();
-  startHand();
+  //startHand();
   exposeToWindow();
   log("Start Hand: OK");
   render();
