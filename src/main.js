@@ -50,44 +50,86 @@ function seatLine(s) {
 }
 
 function render() {
-  const st = getState();
-  if (!st) return;
+   const st = getState() || {};
+  const seats = st.seats || [];
+  const street = st.street ?? "idle";
+  const pot = st.pot ?? 0;
+  const board = Array.isArray(st.community) ? st.community.join(" ") : "(none)";
+  const toAct = st.toAct ?? 0;
+
+  const you = seats[0] || {};
+  const bot = seats[1] || {};
+
+  const seatCard = (s, label, isYou) => {
+    const stack = s.stack ?? 0;
+    const bet = s.bet ?? 0;
+    const folded = !!s.folded;
+    const inHand = !!s.inHand;
+    const hole = Array.isArray(s.hole) ? s.hole.join(" ") : "";
+    const status = folded ? "FOLDED" : (inHand ? "IN HAND" : "OUT");
+    const pillClass = folded ? "warn" : "ok";
+    const act = (toAct === s.i) ? " ▶ TO ACT" : "";
+
+    return `
+      <div class="mx-card">
+        <div class="row">
+          <div class="name">${label}${isYou ? " (YOU)" : ""}${act}</div>
+          <div class="mx-pill ${pillClass}">${status}</div>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <div>stack: <b style="color:var(--text)">${stack}</b></div>
+          <div>bet: <b style="color:var(--text)">${bet}</b></div>
+          <div>hole: <b style="color:var(--text)">${hole || "-"}</b></div>
+        </div>
+      </div>
+    `;
+  };
+
+  const cardsHtml = seats.map(s => seatCard(s, `Seat ${s.i ?? "?"}`, (s.i === 0))).join("");
 
   setApp(`
-    <div class="game">
-      <h2>MIXTABLE / ポーカー</h2>
-
-      <div class="controls">
-        <button id="btnStart">Start Hand</button>
-        <button id="btnCall">コール / チェック</button>
-        <button id="btnRaise">ミン・レイズ</button>
-        <button id="btnFold">フォールド</button>
-        <button id="btnShow">Showdown</button>
-        <button id="btnDump">ダンプ状態</button>
-        <button id="btnClear">ログ消去</button>
+    <div class="mx-wrap">
+      <div class="mx-topbar">
+        <div class="mx-brand">MIXTABLE / ポーカー</div>
+        <div class="mx-badges">
+          <span class="mx-badge"><span class="mx-dot"></span> 実験的 / 無料 / 保証なし</span>
+          <span class="mx-badge">Pot: <b style="color:var(--text)">${pot}</b></span>
+          <span class="mx-badge">Street: <b style="color:var(--text)">${street}</b></span>
+        </div>
       </div>
 
-      <div class="panels">
-        <pre class="state">
-Hand #${st.handNo}
-Street: ${st.street}
-Pot: ${st.pot}
-Board: ${(st.community || []).join(" ")}
+      <div class="mx-controls">
+        <button id="btnStart" class="mx-btn primary">Start Hand（ブラインド+配牌）</button>
+        <button id="btnCall" class="mx-btn">コール / チェック</button>
+        <button id="btnRaise" class="mx-btn">ミン・レイズ</button>
+        <button id="btnFold" class="mx-btn danger">フォールド</button>
+        <button id="btnShow" class="mx-btn">Showdown（役判定+配当）</button>
+        <button id="btnDump" class="mx-btn">ダンプ状態</button>
+        <button id="btnClear" class="mx-btn">ログ消去</button>
+      </div>
 
-${st.seats.map(s =>
-  `Seat ${s.i} ${s.name}
- stack=${s.stack}
- bet=${s.bet}
- inHand=${s.inHand}
- folded=${s.folded}
- hole=${(s.hole || []).join(" ")}`
-).join("\n\n")}
-        </pre>
+      <div class="mx-table">
+        <div class="mx-felt"></div>
+        <div class="mx-grid">
+          <div class="mx-panel">
+            <h3>TABLE</h3>
+            <div class="mx-note">Board: <b style="color:var(--text)">${board}</b></div>
+            <div class="mx-cards" style="margin-top:10px">
+              ${cardsHtml}
+            </div>
+          </div>
 
-        <pre class="log" id="log"></pre>
+          <div class="mx-panel">
+            <h3>LOG</h3>
+            <pre class="mx-pre" id="log"></pre>
+          </div>
+        </div>
       </div>
     </div>
   `);
+
+  // （既存のイベント付け直しはあなたの main.js に既にある想定）
+
 }
 
 
