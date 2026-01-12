@@ -50,87 +50,38 @@ function seatLine(s) {
 }
 
 function render() {
-   const st = getState() || {};
-  const seats = st.seats || [];
-  const street = st.street ?? "idle";
-  const pot = st.pot ?? 0;
-  const board = Array.isArray(st.community) ? st.community.join(" ") : "(none)";
-  const toAct = st.toAct ?? 0;
-
-  const you = seats[0] || {};
-  const bot = seats[1] || {};
-
-  const seatCard = (s, label, isYou) => {
-    const stack = s.stack ?? 0;
-    const bet = s.bet ?? 0;
-    const folded = !!s.folded;
-    const inHand = !!s.inHand;
-    const hole = Array.isArray(s.hole) ? s.hole.join(" ") : "";
-    const status = folded ? "FOLDED" : (inHand ? "IN HAND" : "OUT");
-    const pillClass = folded ? "warn" : "ok";
-    const act = (toAct === s.i) ? " ▶ TO ACT" : "";
-
-    return `
-      <div class="mx-card">
-        <div class="row">
-          <div class="name">${label}${isYou ? " (YOU)" : ""}${act}</div>
-          <div class="mx-pill ${pillClass}">${status}</div>
-        </div>
-        <div class="row" style="margin-top:6px">
-          <div>stack: <b style="color:var(--text)">${stack}</b></div>
-          <div>bet: <b style="color:var(--text)">${bet}</b></div>
-          <div>hole: <b style="color:var(--text)">${hole || "-"}</b></div>
-        </div>
-      </div>
-    `;
-  };
-
-  const cardsHtml = seats.map(s => seatCard(s, `Seat ${s.i ?? "?"}`, (s.i === 0))).join("");
-
   setApp(`
-    <div class="mx-wrap">
-      <div class="mx-topbar">
-        <div class="mx-brand">MIXTABLE / ポーカー</div>
-        <div class="mx-badges">
-          <span class="mx-badge"><span class="mx-dot"></span> 実験的 / 無料 / 保証なし</span>
-          <span class="mx-badge">Pot: <b style="color:var(--text)">${pot}</b></span>
-          <span class="mx-badge">Street: <b style="color:var(--text)">${street}</b></span>
-        </div>
-      </div>
-
-      <div class="mx-controls">
-        <button id="btnStart" class="mx-btn primary">Start Hand（ブラインド+配牌）</button>
-        <button id="btnCall" class="mx-btn">コール / チェック</button>
-        <button id="btnRaise" class="mx-btn">ミン・レイズ</button>
-        <button id="btnFold" class="mx-btn danger">フォールド</button>
-        <button id="btnShow" class="mx-btn">Showdown（役判定+配当）</button>
-        <button id="btnDump" class="mx-btn">ダンプ状態</button>
-        <button id="btnClear" class="mx-btn">ログ消去</button>
-      </div>
-
-      <div class="mx-table">
-        <div class="mx-felt"></div>
-        <div class="mx-grid">
-          <div class="mx-panel">
-            <h3>TABLE</h3>
-            <div class="mx-note">Board: <b style="color:var(--text)">${board}</b></div>
-            <div class="mx-cards" style="margin-top:10px">
-              ${cardsHtml}
-            </div>
-          </div>
-
-          <div class="mx-panel">
-            <h3>LOG</h3>
-            <pre class="mx-pre" id="log"></pre>
-          </div>
-        </div>
-      </div>
+    <div class="header">
+      <h1>MIXTABLE / ポーカー</h1>
     </div>
+
+    <div class="controls">
+      <button id="btn-start">Start Hand（ブラインド+配牌）</button>
+      <button id="btn-call">コール / チェック</button>
+      <button id="btn-raise">ミン・レイズ</button>
+      <button id="btn-fold">フォールド</button>
+      <button id="btn-showdown">Showdown</button>
+      <button id="btn-dump">ダンプ状態</button>
+      <button id="btn-clear">ログ消去</button>
+    </div>
+
+    <div class="table">
+      <!-- テーブル描画 -->
+    </div>
+
+    <div class="log" id="log"></div>
   `);
 
-  // （既存のイベント付け直しはあなたの main.js に既にある想定）
-
+  // 👇 ここで「ボタンと処理を接続」
+  document.getElementById("btn-start").onclick = doStartHand;
+  document.getElementById("btn-call").onclick = doCallCheck;
+  document.getElementById("btn-raise").onclick = doMinRaise;
+  document.getElementById("btn-fold").onclick = doFold;
+  document.getElementById("btn-showdown").onclick = doShowdown;
+  document.getElementById("btn-dump").onclick = dumpState;
+  document.getElementById("btn-clear").onclick = clearLog;
 }
+
 
 
 // -------- showdown (eval7) + payout --------
