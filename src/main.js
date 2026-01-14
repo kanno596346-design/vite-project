@@ -57,6 +57,8 @@ function ensureUI() {
       </header>
 
       <div class="actions">
+      <button id="btnAutoOn" class="btn">AUTO ON</button>
+<button id="btnAutoOff" class="btn">AUTO OFF</button>
         <button id="btnStart" class="btn primary">Start Hand（ブラインド+配牌）</button>
         <button id="btnCall"  class="btn">コール / チェック</button>
         <button id="btnRaise" class="btn">ミン・レイズ</button>
@@ -148,6 +150,9 @@ function logLine(line) {
 }
 // ---------- actions ----------
 function wireEventsOnce() {
+  $("btnAutoOn")?.addEventListener("click", () => startAutoBot());
+$("btnAutoOff")?.addEventListener("click", () => stopAutoBot());
+
   // 二重登録防止
   if (window.__mixtableWired) return;
   window.__mixtableWired = true;
@@ -236,3 +241,45 @@ window.addEventListener("DOMContentLoaded", () => {
   wireEventsOnce();
   render();
 });
+// ===============================
+// AUTO BOT LOOP (safe)
+// ===============================
+let __autoTimer = null;
+
+function startAutoBot() {
+  if (__autoTimer) return;
+  logLine("AUTO: ON");
+  __autoTimer = setInterval(() => {
+    try {
+      const s = getState?.();
+      if (!s) return;
+
+      // idleなら何もしない（自分で Start Hand 押す）
+      if (s.street === "idle") return;
+
+      const toAct = Number.isInteger(s.toAct) ? s.toAct : -1;
+
+      // あなた（Seat0）がアクション番なら自動で押さない
+      if (toAct === 0) return;
+
+      // BOT番なら 1手だけ進める（安全：まずは Call/Check 固定）
+      actCallCheck();
+      logLine(`AUTO: Seat${toAct} Call/Check`);
+      render();
+    } catch (e) {
+      console.error(e);
+      logLine("AUTO: ERROR (stopped)");
+      stopAutoBot();
+    }
+  }, 1200);
+}
+
+function stopAutoBot() {
+  if (__autoTimer) clearInterval(__autoTimer);
+  __autoTimer = null;
+  logLine("AUTO: OFF");
+}
+
+// window から呼べるように
+window.startAutoBot = startAutoBot;
+window.stopAutoBot = stopAutoBot;
