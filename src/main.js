@@ -242,36 +242,89 @@ window.addEventListener("DOMContentLoaded", () => {
   render();
 });
 // ===============================
-// AUTO BOT LOOP (safe)
+// AUTO BOT LOOP (smart + safe)
 // ===============================
 let __autoTimer = null;
+
+function calcToCall(s) {
+  const seats = Array.isArray(s.seats) ? s.seats : [];
+  const toAct = Number.isInteger(s.toAct) ? s.toAct : -1;
+  const maxBet = seats.length ? Math.max(...seats.map((p) => p.bet || 0)) : 0;
+  const myBet = seats[toAct]?.bet || 0;
+  return Math.max(0, maxBet - myBet);
+}
+
+function autoStepOnce() {
+  const s = getState?.();
+  if (!s) return;
+
+  // idleなら何もしない（あなたが Start Hand 押す）
+  if (s.street === "idle") return;
+
+  // showdown なら自動で配当まで
+  if (s.street === "showdown") {
+    try {
+      forceShowdown();
+      logLine("AUTO: Showdown + Payout");
+      render();
+    } catch (e) {
+      console.error(e);
+      logLine("AUTO: showdown ERROR");
+      stopAutoBot();
+    }
+    return;
+  }
+
+  const toAct = Number.isInteger(s.toAct) ? s.toAct : -1;
+  if (toAct < 0) return;
+
+  // あなた（Seat0）が番なら止める（安全）
+  if (toAct === 0) return;
+
+  const me = s.seats?.[toAct];
+  if (!me || !me.inHand || me.folded) return;
+
+  const toCall = calcToCall(s);
+
+  // 行動の確率（安全寄り）
+  // - toCall > 0: ほぼコール、たまにフォールド、稀にレイズ
+  // - toCall == 0: ほぼチェック、たまにレイズ
+  const r = Math.random();
+
+  try {
+    if (toCall > 0) {
+      if (r < 0.06) {
+        actFold();
+        logLine(`AUTO: Seat${toAct} FOLD (toCall=${toCall})`);
+      } else if (r < 0.10) {
+        actMinRaise();
+        logLine(`AUTO: Seat${toAct} MIN-RAISE (toCall=${toCall})`);
+      } else {
+        actCallCheck();
+        logLine(`AUTO: Seat${toAct} CALL (toCall=${toCall})`);
+      }
+    } else {
+      if (r < 0.12) {
+        actMinRaise();
+        logLine(`AUTO: Seat${toAct} MIN-RAISE (toCall=0)`);
+      } else {
+        actCallCheck();
+        logLine(`AUTO: Seat${toAct} CHECK`);
+      }
+    }
+
+    render();
+  } catch (e) {
+    console.error(e);
+    logLine("AUTO: ERROR (stopped)");
+    stopAutoBot();
+  }
+}
 
 function startAutoBot() {
   if (__autoTimer) return;
   logLine("AUTO: ON");
-  __autoTimer = setInterval(() => {
-    try {
-      const s = getState?.();
-      if (!s) return;
-
-      // idleなら何もしない（自分で Start Hand 押す）
-      if (s.street === "idle") return;
-
-      const toAct = Number.isInteger(s.toAct) ? s.toAct : -1;
-
-      // あなた（Seat0）がアクション番なら自動で押さない
-      if (toAct === 0) return;
-
-      // BOT番なら 1手だけ進める（安全：まずは Call/Check 固定）
-      actCallCheck();
-      logLine(`AUTO: Seat${toAct} Call/Check`);
-      render();
-    } catch (e) {
-      console.error(e);
-      logLine("AUTO: ERROR (stopped)");
-      stopAutoBot();
-    }
-  }, 1200);
+  __autoTimer = setInterval(autoStepOnce, 900); // 少し速く
 }
 
 function stopAutoBot() {
@@ -280,6 +333,5 @@ function stopAutoBot() {
   logLine("AUTO: OFF");
 }
 
-// window から呼べるように
 window.startAutoBot = startAutoBot;
 window.stopAutoBot = stopAutoBot;
