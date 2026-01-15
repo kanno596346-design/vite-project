@@ -1,4 +1,6 @@
 // src/main.js
+import "./style.css";
+
 import {
   createInitialState,
   exposeToWindow,
@@ -8,142 +10,162 @@ import {
   actCallCheck,
   actMinRaise,
   forceShowdown,
+  // optional: if your gameState exports these, fine; if not, they stay unused
+  // startAutoBot,
+  // stopAutoBot,
 } from "./gameState.js";
 
-// ---------- small helpers ----------
+// ---------- tiny helpers ----------
 const $ = (id) => document.getElementById(id);
 
-function clampText(s, max = 4000) {
-  const t = String(s ?? "");
-  return t.length > max ? t.slice(-max) : t;
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
-function cardStr(c) {
-  if (!c) return "-";
-  if (typeof c === "string") return c;
-  // どんな型でも落ちないように
-  return String(c.rank ?? c.r ?? "") + String(c.suit ?? c.s ?? "");
+function safeText(id, value) {
+  const el = $(id);
+  if (!el) return; // ← nullでも落とさない
+  el.textContent = value ?? "";
 }
 
-function cardsStr(arr) {
-  if (!Array.isArray(arr) || arr.length === 0) return "(none)";
-  return arr.map(cardStr).join(" ");
+// LOG表示（画面側）
+function logLine(line) {
+  const box = $("logBox");
+  if (!box) return;
+  const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 8;
+  box.textContent += (box.textContent ? "\n" : "") + line;
+  if (atBottom) box.scrollTop = box.scrollHeight;
 }
 
-function streetLabel(street) {
-  return street || "idle";
+function clearLog() {
+  const box = $("logBox");
+  if (!box) return;
+  box.textContent = "";
 }
 
 // ---------- UI skeleton ----------
-function setApp(html) {
-  const app = document.querySelector("#app");
-  if (!app) {
-    console.error(`#app が見つかりません。index.html に <div id="app"></div> が必要です`);
-    return;
-  }
-  app.innerHTML = html;
-}
-
 function ensureUI() {
-  const app = document.getElementById("app");
-  if (!app) return;
+  const root = $("app");
+  if (!root) return;
 
-  app.innerHTML = `
-    <div style="padding:12px; font-family:system-ui">
-      <h2>MIXTABLE Poker</h2>
-
-      <div style="margin-bottom:8px">
-        <button id="btnStart">Start Hand</button>
-        <button id="btnCall">Call / Check</button>
-        <button id="btnRaise">Min Raise</button>
-        <button id="btnFold">Fold</button>
-        <button id="btnShow">SHOWDOWN</button>
+  // すでにUIがあるなら最低限の不足だけ補う
+  // （ただし今回のエラーはid不一致が多いので、ここで土台を固定します）
+  root.innerHTML = `
+    <div class="mx-wrap">
+      <div class="mx-top">
+        <div class="mx-title">MIXTABLE / ポーカー</div>
+        <div class="mx-badges">
+          <span class="mx-badge">実験的 / 無料 / 保証なし</span>
+          <span class="mx-badge">Pot: <b id="potVal">0</b></span>
+          <span class="mx-badge">Street: <b id="streetVal">idle</b></span>
+        </div>
       </div>
 
-      <pre id="log" style="height:220px; overflow:auto; background:#111; color:#0f0; padding:8px"></pre>
+      <div class="mx-actions">
+        <button id="btnStart" class="mx-btn mx-btn-primary">Start Hand（ブラインド+配牌）</button>
+        <button id="btnCall" class="mx-btn">コール / チェック</button>
+        <button id="btnRaise" class="mx-btn">ミン・レイズ</button>
+        <button id="btnFold" class="mx-btn mx-btn-warn">フォールド</button>
+        <button id="btnShow" class="mx-btn mx-btn-dark">Showdown（役判定+配当）</button>
+        <button id="btnDump" class="mx-btn">ダンプ状態</button>
+        <button id="btnClear" class="mx-btn">ログ消去</button>
+      </div>
+
+      <div class="mx-grid">
+        <div class="mx-card">
+          <div class="mx-card-h">TABLE</div>
+          <div class="mx-row"><span class="mx-k">Board</span><span class="mx-v" id="boardVal">(none)</span></div>
+          <div id="tableBox" class="mx-tablebox"></div>
+        </div>
+
+        <div class="mx-card">
+          <div class="mx-card-h">LOG</div>
+          <pre id="logBox" class="mx-log"></pre>
+        </div>
+      </div>
     </div>
   `;
 }
-// ---------- rendering ----------
+
+// ---------- render ----------
 function render() {
-  const st = getState?.() ?? null;
-
-  // UIがまだ無ければ作る
-  if (!$("uiLog")) ensureUI();
-
+  const st = getState?.();
   if (!st) {
-    $("uiLog").textContent = "state がありません（getState() が null）";
+    safeText("boardVal", "(no state)");
+    safeText("potVal", "0");
+    safeText("streetVal", "unknown");
+    const tb = $("tableBox");
+    if (tb) tb.innerHTML = `<div class="mx-muted">state がありません</div>`;
     return;
   }
 
-  $("uiPot").textContent = String(st.pot ?? 0);
-  $("uiStreet").textContent = streetLabel(st.street);
-  $("uiBoard").textContent = cardsStr(st.community);
+  // pot / street
+  safeText("potVal", String(st.pot ?? 0));
+  safeText("streetVal", String(st.street ?? "idle"));
+
+  // board
+  const board = Array.isArray(st.community) ? st.community.join(" ") : "(none)";
+  safeText("boardVal", board || "(none)");
 
   // seats
   const seats = Array.isArray(st.seats) ? st.seats : [];
-  const toAct = Number.isInteger(st.toAct) ? st.toAct : -1;
+  const toAct = st.toAct ?? null;
 
-  const seatHtml = seats
-    .map((s, i) => {
-      const name = s?.name ?? (i === 0 ? "YOU" : `Seat ${i}`);
-      const stack = s?.stack ?? 0;
-      const bet = s?.bet ?? 0;
-      const inHand = !!s?.inHand;
-      const folded = !!s?.folded;
-      const hole = Array.isArray(s?.hole) ? s.hole : [];
+  const tb = $("tableBox");
+  if (!tb) return;
 
-      const tags = [
-        inHand && !folded ? `<span class="tag in">IN HAND</span>` : `<span class="tag out">OUT</span>`,
-        i === toAct ? `<span class="tag act">▶ TO ACT</span>` : "",
-        folded ? `<span class="tag fold">FOLDED</span>` : "",
-      ].filter(Boolean).join(" ");
-
+  tb.innerHTML = seats
+    .map((seat, i) => {
+      const name = escapeHtml(seat?.name ?? `Seat ${i}`);
+      const stack = seat?.stack ?? 0;
+      const bet = seat?.bet ?? 0;
+      const inHand = seat?.inHand ? "IN HAND" : "OUT";
+      const folded = seat?.folded ? "FOLDED" : "";
+      const hole =
+        Array.isArray(seat?.hole) && seat.hole.length
+          ? seat.hole.join(" ")
+          : "(none)";
+      const actMark = i === toAct ? "▶ TO ACT" : "";
       return `
-        <div class="seat ${i === toAct ? "isAct" : ""}">
-          <div class="seatTop">
-            <div class="seatName">Seat ${i} <b>${name}</b></div>
-            <div class="seatTags">${tags}</div>
+        <div class="mx-seat ${i === toAct ? "mx-seat-act" : ""}">
+          <div class="mx-seat-top">
+            <div class="mx-seat-name">${name} ${actMark}</div>
+            <div class="mx-pill">${inHand}</div>
           </div>
-          <div class="seatRow">
+          <div class="mx-seat-mid">
             <div>stack: <b>${stack}</b></div>
             <div>bet: <b>${bet}</b></div>
-            <div>hole: <b>${cardsStr(hole)}</b></div>
+            <div class="mx-muted">${folded}</div>
           </div>
+          <div class="mx-seat-hole">hole: <b>${escapeHtml(hole)}</b></div>
         </div>
       `;
     })
     .join("");
-
-  $("uiSeats").innerHTML = seatHtml || `<div class="small">(no seats)</div>`;
 }
 
-// ---------- logging ----------
-function clearLog() {
-  if ($("uiLog")) $("uiLog").textContent = "";
-}
-
-function logLine(line) {
-  if (!$("uiLog")) ensureUI();
-  const cur = $("uiLog").textContent || "";
-  $("uiLog").textContent = clampText(cur + (cur ? "\n" : "") + line, 8000);
-  $("uiLog").scrollTop = $("uiLog").scrollHeight;
-}
-// ---------- actions ----------
+// ---------- actions (wire once) ----------
 function wireEventsOnce() {
-$("btnShow")?.addEventListener("click", () => {
-  console.log("---- SHOWDOWN ---- (button clicked)");
-  try {
-    forceShowdown();
-    console.log("---- SHOWDOWN ---- (forceShowdown OK)");
-    logLine("---- SHOWDOWN ----");
-  } catch (e) {
-    console.error(e);
-    console.log("---- SHOWDOWN ---- (ERROR)");
-    logLine("Showdown ERROR");
-  }
-  render();
-});
+  // 二重登録防止
+  if (window.__mixtableWired) return;
+  window.__mixtableWired = true;
+
+  $("btnStart")?.addEventListener("click", () => {
+    try {
+      startHand();
+      logLine("Start Hand: OK");
+    } catch (e) {
+      console.error(e);
+      logLine("Start Hand: ERROR");
+    }
+    render();
+  });
+
   $("btnCall")?.addEventListener("click", () => {
     try {
       actCallCheck();
@@ -179,7 +201,7 @@ $("btnShow")?.addEventListener("click", () => {
 
   $("btnShow")?.addEventListener("click", () => {
     try {
-      // ここが重要： doShowdown() ではなく forceShowdown()
+      // 重要： doShowdown ではなく forceShowdown
       forceShowdown();
       logLine("---- SHOWDOWN ----");
     } catch (e) {
@@ -204,7 +226,6 @@ $("btnShow")?.addEventListener("click", () => {
 
 // ---------- boot ----------
 window.addEventListener("DOMContentLoaded", () => {
-  // /poker/ 以外でも壊れないように
   ensureUI();
 
   try {
@@ -212,111 +233,9 @@ window.addEventListener("DOMContentLoaded", () => {
     exposeToWindow();
   } catch (e) {
     console.error(e);
+    logLine("Boot ERROR (see console)");
   }
 
   wireEventsOnce();
   render();
 });
-// ===============================
-// AUTO BOT LOOP (smart + safe)
-// ===============================
-if (s.toAct !== undefined) {
-  const toAct = s.toAct;
-
-  const seats = Array.isArray(s.seats) ? s.seats : [];
-  const youIndex =
-    seats.findIndex((p) => (p?.name || "").toUpperCase() === "YOU") ?? -1;
-
-  const you = youIndex >= 0 ? youIndex : 0;
-
-  // あなたの番なら止める
-  if (toAct === you) return;
-
-  // BOT 行動
-  setTimeout(() => {
-    actBot();
-    render();
-  }, 600);
-}
-
-function autoStepOnce() {
-  const s = getState?.();
-  if (!s) return;
-
-  // idleなら何もしない（あなたが Start Hand 押す）
-  if (s.street === "idle") return;
-
-  // showdown なら自動で配当まで
-  if (s.street === "showdown") {
-    try {
-      forceShowdown();
-      logLine("AUTO: Showdown + Payout");
-      render();
-    } catch (e) {
-      console.error(e);
-      logLine("AUTO: showdown ERROR");
-      stopAutoBot();
-    }
-    return;
-  }
-
-  const toAct = Number.isInteger(s.toAct) ? s.toAct : -1;
-  if (toAct < 0) return;
-
-  // あなた（Seat0）が番なら止める（安全）
-  if (toAct === 0) return;
-
-  const me = s.seats?.[toAct];
-  if (!me || !me.inHand || me.folded) return;
-
-  const toCall = calcToCall(s);
-
-  // 行動の確率（安全寄り）
-  // - toCall > 0: ほぼコール、たまにフォールド、稀にレイズ
-  // - toCall == 0: ほぼチェック、たまにレイズ
-  const r = Math.random();
-
-  try {
-    if (toCall > 0) {
-      if (r < 0.06) {
-        actFold();
-        logLine(`AUTO: Seat${toAct} FOLD (toCall=${toCall})`);
-      } else if (r < 0.10) {
-        actMinRaise();
-        logLine(`AUTO: Seat${toAct} MIN-RAISE (toCall=${toCall})`);
-      } else {
-        actCallCheck();
-        logLine(`AUTO: Seat${toAct} CALL (toCall=${toCall})`);
-      }
-    } else {
-      if (r < 0.12) {
-        actMinRaise();
-        logLine(`AUTO: Seat${toAct} MIN-RAISE (toCall=0)`);
-      } else {
-        actCallCheck();
-        logLine(`AUTO: Seat${toAct} CHECK`);
-      }
-    }
-
-    render();
-  } catch (e) {
-    console.error(e);
-    logLine("AUTO: ERROR (stopped)");
-    stopAutoBot();
-  }
-}
-
-function startAutoBot() {
-  if (__autoTimer) return;
-  logLine("AUTO: ON");
-  __autoTimer = setInterval(autoStepOnce, 900); // 少し速く
-}
-
-function stopAutoBot() {
-  if (__autoTimer) clearInterval(__autoTimer);
-  __autoTimer = null;
-  logLine("AUTO: OFF");
-}
-
-window.startAutoBot = startAutoBot;
-window.stopAutoBot = stopAutoBot;
