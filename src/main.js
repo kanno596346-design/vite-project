@@ -200,16 +200,41 @@ function wireEventsOnce() {
   });
 
   $("btnShow")?.addEventListener("click", () => {
-    try {
-      // 重要： doShowdown ではなく forceShowdown
-      forceShowdown();
-      logLine("---- SHOWDOWN ----");
-    } catch (e) {
-      console.error(e);
-      logLine("Showdown ERROR");
+  try {
+    // 1) まず showdown を要求（街が進んでいない/ボード不足でもここから確実に詰める）
+    forceShowdown();
+    logLine("---- SHOWDOWN ----");
+
+    // 2) 念のため state を見て、足りないボードがあれば最後まで進める
+    //    （startHand/actCallCheck/actMinRaise/actFold がある前提）
+    const st = getState?.();
+    const street = st?.street;
+
+    // street が残っているなら、riverまで「Call/Check」を回して進める
+    // preflop/flop/turn/river/showdown など想定
+    let safety = 0;
+    while (safety < 20) {
+      const cur = getState?.();
+      const s = cur?.street;
+
+      if (!s) break;
+      if (s === "showdown" || s === "done") break;
+
+      // 進行を前に進める（最小：Call/Checkで進める）
+      actCallCheck();
+      logLine("Auto: Call/Check to reach showdown");
+      safety++;
     }
-    render();
-  });
+
+    // 3) もう一度 showdown を確定させる（ここで winners/payout が走るはず）
+    forceShowdown();
+    logLine("---- SHOWDOWN (final) ----");
+  } catch (e) {
+    console.error(e);
+    logLine("Showdown ERROR");
+  }
+  render();
+});
 
   $("btnDump")?.addEventListener("click", () => {
     const st = getState?.();
