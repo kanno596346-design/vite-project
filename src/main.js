@@ -45,43 +45,24 @@ function setApp(html) {
 }
 
 function ensureUI() {
-  setApp(`
-    <div class="mx">
-      <header class="topbar">
-        <div class="title">MIXTABLE / ポーカー</div>
-        <div class="chips">
-          <span class="pill ok">● 実験的 / 無料 / 保証なし</span>
-          <span class="pill">Pot: <b id="uiPot">0</b></span>
-          <span class="pill">Street: <b id="uiStreet">idle</b></span>
-        </div>
-      </header>
+  const app = document.getElementById("app");
+  if (!app) return;
 
-      <div class="actions">
-      <button id="btnAutoOn" class="btn">AUTO ON</button>
-<button id="btnAutoOff" class="btn">AUTO OFF</button>
-        <button id="btnStart" class="btn primary">Start Hand（ブラインド+配牌）</button>
-        <button id="btnCall"  class="btn">コール / チェック</button>
-        <button id="btnRaise" class="btn">ミン・レイズ</button>
-        <button id="btnFold"  class="btn danger">フォールド</button>
-        <button id="btnShow"  class="btn">Showdown（役判定+配当）</button>
-        <button id="btnDump"  class="btn">ダンプ状態</button>
-        <button id="btnClear" class="btn">ログ消去</button>
+  app.innerHTML = `
+    <div style="padding:12px; font-family:system-ui">
+      <h2>MIXTABLE Poker</h2>
+
+      <div style="margin-bottom:8px">
+        <button id="btnStart">Start Hand</button>
+        <button id="btnCall">Call / Check</button>
+        <button id="btnRaise">Min Raise</button>
+        <button id="btnFold">Fold</button>
+        <button id="btnShow">SHOWDOWN</button>
       </div>
 
-      <main class="grid">
-        <section class="card">
-          <div class="cardTitle">TABLE</div>
-          <div class="small">Board: <b id="uiBoard">(none)</b></div>
-          <div id="uiSeats" class="seats"></div>
-        </section>
-
-        <section class="card">
-          <div class="cardTitle">LOG</div>
-          <pre id="uiLog" class="log"></pre>
-        </section>
-      </main>
+      <pre id="log" style="height:220px; overflow:auto; background:#111; color:#0f0; padding:8px"></pre>
     </div>
-  `);
+  `;
 }
 // ---------- rendering ----------
 function render() {
@@ -150,24 +131,19 @@ function logLine(line) {
 }
 // ---------- actions ----------
 function wireEventsOnce() {
-  $("btnAutoOn")?.addEventListener("click", () => startAutoBot());
-$("btnAutoOff")?.addEventListener("click", () => stopAutoBot());
-
-  // 二重登録防止
-  if (window.__mixtableWired) return;
-  window.__mixtableWired = true;
-
-  $("btnStart")?.addEventListener("click", () => {
-    try {
-      startHand();
-      logLine("Start Hand: OK");
-    } catch (e) {
-      console.error(e);
-      logLine("Start Hand: ERROR");
-    }
-    render();
-  });
-
+$("btnShow")?.addEventListener("click", () => {
+  console.log("---- SHOWDOWN ---- (button clicked)");
+  try {
+    forceShowdown();
+    console.log("---- SHOWDOWN ---- (forceShowdown OK)");
+    logLine("---- SHOWDOWN ----");
+  } catch (e) {
+    console.error(e);
+    console.log("---- SHOWDOWN ---- (ERROR)");
+    logLine("Showdown ERROR");
+  }
+  render();
+});
   $("btnCall")?.addEventListener("click", () => {
     try {
       actCallCheck();
@@ -244,14 +220,23 @@ window.addEventListener("DOMContentLoaded", () => {
 // ===============================
 // AUTO BOT LOOP (smart + safe)
 // ===============================
-let __autoTimer = null;
+if (s.toAct !== undefined) {
+  const toAct = s.toAct;
 
-function calcToCall(s) {
   const seats = Array.isArray(s.seats) ? s.seats : [];
-  const toAct = Number.isInteger(s.toAct) ? s.toAct : -1;
-  const maxBet = seats.length ? Math.max(...seats.map((p) => p.bet || 0)) : 0;
-  const myBet = seats[toAct]?.bet || 0;
-  return Math.max(0, maxBet - myBet);
+  const youIndex =
+    seats.findIndex((p) => (p?.name || "").toUpperCase() === "YOU") ?? -1;
+
+  const you = youIndex >= 0 ? youIndex : 0;
+
+  // あなたの番なら止める
+  if (toAct === you) return;
+
+  // BOT 行動
+  setTimeout(() => {
+    actBot();
+    render();
+  }, 600);
 }
 
 function autoStepOnce() {
