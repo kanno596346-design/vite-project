@@ -361,3 +361,121 @@ function exposeToWindow() {
 window.getState = getState;
 
 }
+// ===============================
+// PART 3/4: payouts display + safe showdown printing
+// ===============================
+function showPayoutFromState() {
+  const st = getState?.();
+  if (!st) { logLine("Payout: state missing"); return; }
+
+  const winners =
+    st?.lastResult?.winners ??
+    st?.showdown?.winners ??
+    st?.result?.winners ??
+    st?.winners ??
+    [];
+
+  const name =
+    st?.lastResult?.name ??
+    st?.showdown?.name ??
+    st?.result?.name ??
+    st?.handName ??
+    "";
+
+  const payouts =
+    st?.lastResult?.payouts ??
+    st?.showdown?.payouts ??
+    st?.result?.payouts ??
+    st?.payouts ??
+    null;
+
+  if (name) logLine(`Hand: ${name}`);
+
+  if (Array.isArray(winners) && winners.length > 0) {
+    logLine(`Winners: ${winners.join(", ")}`);
+  } else {
+    logLine("Winners: (none)");
+  }
+
+  if (payouts) {
+    logLine("---- PAYOUT ----");
+    if (Array.isArray(payouts)) {
+      payouts.forEach((p) => logLine(String(p)));
+    } else if (typeof payouts === "object") {
+      Object.entries(payouts).forEach(([k, v]) => logLine(`${k}: ${v}`));
+    } else {
+      logLine(String(payouts));
+    }
+  } else {
+    // 最低限スタック表示
+    if (Array.isArray(st.seats)) {
+      logLine(`Stacks: ${st.seats.map(s => `${s.name ?? s.i ?? "P"}=${s.stack}`).join(" / ")}`);
+    }
+  }
+}
+
+// forceShowdown の後に必ず表示
+const _origForceShowdown = forceShowdown;
+forceShowdown = function patchedForceShowdown() {
+  _origForceShowdown();
+  showPayoutFromState();
+  exposeToWindow(); // 置き換え後を window に反映
+};
+
+// ===============================
+// PART 4/4: wire buttons + boot
+// ===============================
+function wireEventsOnce() {
+  if (window.__mixtableWired) return;
+  window.__mixtableWired = true;
+
+  $("btnStart")?.addEventListener("click", () => {
+    try { startHand(); } catch (e) { console.error(e); logLine("Start Hand: ERROR"); }
+    render();
+  });
+
+  $("btnCall")?.addEventListener("click", () => {
+    try { actCallCheck(); } catch (e) { console.error(e); logLine("Call/Check: ERROR"); }
+    render();
+  });
+
+  $("btnRaise")?.addEventListener("click", () => {
+    try { actMinRaise(); } catch (e) { console.error(e); logLine("Min-Raise: ERROR"); }
+    render();
+  });
+
+  $("btnFold")?.addEventListener("click", () => {
+    try { actFold(); } catch (e) { console.error(e); logLine("Fold: ERROR"); }
+    render();
+  });
+
+  $("btnShow")?.addEventListener("click", () => {
+    try { forceShowdown(); } catch (e) { console.error(e); logLine("Showdown: ERROR"); }
+    render();
+  });
+
+  $("btnDump")?.addEventListener("click", () => {
+    try { console.log("STATE:", getState?.()); logLine("Dumped state to console"); } catch (e) { console.error(e); }
+    render();
+  });
+
+  $("btnClear")?.addEventListener("click", () => {
+    clearLog();
+    render();
+  });
+}
+
+function render() {
+  // shell が無いなら作る
+  if (!$("btnShow") || !$("tableBox") || !$("logBox")) renderShell();
+  renderState();
+}
+
+// boot
+window.addEventListener("DOMContentLoaded", () => {
+  renderShell();
+  createInitialState();
+  exposeToWindow();
+  wireEventsOnce();
+  render();
+});
