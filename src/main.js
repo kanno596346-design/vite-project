@@ -1,266 +1,363 @@
-// src/main.js
-import "./style.css";
+// ===============================
+// MIXTABLE / poker  (single-file working main.js)
+// PART 1/4: UI + logging + safe helpers
+// ===============================
 
-import {
-  createInitialState,
-  exposeToWindow,
-  getState,
-  startHand,
-  actFold,
-  actCallCheck,
-  actMinRaise,
-  forceShowdown,
-  // optional: if your gameState exports these, fine; if not, they stay unused
-  // startAutoBot,
-  // stopAutoBot,
-} from "./gameState.js";
-
-// ---------- tiny helpers ----------
+// --- small helpers ---
 const $ = (id) => document.getElementById(id);
 
-function escapeHtml(s) {
-  return String(s ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+let LOG = [];
+function logLine(msg) {
+  const s = String(msg);
+  LOG.push(s);
+  if (LOG.length > 500) LOG.shift();
+  const el = $("logBox");
+  if (el) el.textContent = LOG.join("\n");
+  console.log(s);
 }
-
-function safeText(id, value) {
-  const el = $(id);
-  if (!el) return; // ← nullでも落とさない
-  el.textContent = value ?? "";
-}
-
-// LOG表示（画面側）
-function logLine(line) {
-  const box = $("logBox");
-  if (!box) return;
-  const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 8;
-  box.textContent += (box.textContent ? "\n" : "") + line;
-  if (atBottom) box.scrollTop = box.scrollHeight;
-}
-
 function clearLog() {
-  const box = $("logBox");
-  if (!box) return;
-  box.textContent = "";
+  LOG = [];
+  const el = $("logBox");
+  if (el) el.textContent = "";
 }
 
-// ---------- UI skeleton ----------
-function ensureUI() {
-  const root = $("app");
-  if (!root) return;
+// --- state (single source of truth) ---
+let state = null;
 
-  // すでにUIがあるなら最低限の不足だけ補う
-  // （ただし今回のエラーはid不一致が多いので、ここで土台を固定します）
-  root.innerHTML = `
-    <div class="mx-wrap">
-      <div class="mx-top">
-        <div class="mx-title">MIXTABLE / ポーカー</div>
-        <div class="mx-badges">
-          <span class="mx-badge">実験的 / 無料 / 保証なし</span>
-          <span class="mx-badge">Pot: <b id="potVal">0</b></span>
-          <span class="mx-badge">Street: <b id="streetVal">idle</b></span>
-        </div>
+// --- UI: make sure #app exists and render base layout ---
+function ensureApp() {
+  let app = $("app");
+  if (!app) {
+    app = document.createElement("div");
+    app.id = "app";
+    document.body.appendChild(app);
+  }
+  return app;
+}
+
+function renderShell() {
+  const app = ensureApp();
+
+  app.innerHTML = `
+  <style>
+    :root{color-scheme:dark}
+    body{margin:0;background:#0b1220;color:#e5e7eb;font-family:system-ui,-apple-system,Segoe UI,Roboto}
+    .wrap{max-width:980px;margin:20px auto;padding:0 16px}
+    .top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center}
+    .title{font-weight:900;font-size:18px}
+    .badge{font-size:12px;color:#cbd5e1}
+    .bar{position:sticky;top:0;background:#020617;border:1px solid #334155;border-radius:14px;padding:10px 12px}
+    .row{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+    button{border-radius:12px;border:1px solid #334155;background:#0f172a;color:#e5e7eb;padding:10px 12px;cursor:pointer}
+    button:hover{filter:brightness(1.1)}
+    .primary{background:#22c55e;border-color:#16a34a;color:#052e16;font-weight:900}
+    .warn{background:#fb7185;border-color:#f43f5e;color:#3b0a12;font-weight:900}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .card{background:#0b1220;border:1px solid #334155;border-radius:14px;overflow:hidden}
+    .card h3{margin:0;padding:10px 12px;border-bottom:1px solid #334155;font-size:13px;letter-spacing:.04em;color:#cbd5e1}
+    .card .body{padding:12px;white-space:pre-wrap}
+    pre{margin:0;padding:12px;white-space:pre-wrap;min-height:260px;overflow:auto}
+    .kv{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:#cbd5e1}
+    .pill{border:1px solid #334155;border-radius:999px;padding:6px 10px;background:#020617}
+    @media(max-width:900px){.grid{grid-template-columns:1fr}}
+  </style>
+
+  <div class="wrap">
+    <div class="bar">
+      <div class="top">
+        <div class="title">MIXTABLE / poker</div>
+        <div class="badge">experimental / free / no guarantees · No real money</div>
       </div>
-
-      <div class="mx-actions">
-        <button id="btnStart" class="mx-btn mx-btn-primary">Start Hand（ブラインド+配牌）</button>
-        <button id="btnCall" class="mx-btn">コール / チェック</button>
-        <button id="btnRaise" class="mx-btn">ミン・レイズ</button>
-        <button id="btnFold" class="mx-btn mx-btn-warn">フォールド</button>
-        <button id="btnShow" class="mx-btn mx-btn-dark">Showdown（役判定+配当）</button>
-        <button id="btnDump" class="mx-btn">ダンプ状態</button>
-        <button id="btnClear" class="mx-btn">ログ消去</button>
+      <div class="kv">
+        <span class="pill">Street: <b id="streetVal">-</b></span>
+        <span class="pill">Pot: <b id="potVal">-</b></span>
+        <span class="pill">ToAct: <b id="toActVal">-</b></span>
       </div>
-
-      <div class="mx-grid">
-        <div class="mx-card">
-          <div class="mx-card-h">TABLE</div>
-          <div class="mx-row"><span class="mx-k">Board</span><span class="mx-v" id="boardVal">(none)</span></div>
-          <div id="tableBox" class="mx-tablebox"></div>
-        </div>
-
-        <div class="mx-card">
-          <div class="mx-card-h">LOG</div>
-          <pre id="logBox" class="mx-log"></pre>
-        </div>
+      <div class="row">
+        <button id="btnStart" class="primary">Start Hand</button>
+        <button id="btnCall">Call / Check</button>
+        <button id="btnRaise">Min-Raise</button>
+        <button id="btnFold" class="warn">Fold</button>
+        <button id="btnShow">Showdown</button>
+        <button id="btnDump">Dump State</button>
+        <button id="btnClear">Clear Log</button>
       </div>
     </div>
+
+    <div class="grid">
+      <div class="card">
+        <h3>TABLE</h3>
+        <div id="tableBox" class="body"></div>
+      </div>
+      <div class="card">
+        <h3>LOG</h3>
+        <pre id="logBox"></pre>
+      </div>
+    </div>
+  </div>
   `;
 }
 
-// ---------- render ----------
-function render() {
-  const st = getState?.();
-  if (!st) {
-    safeText("boardVal", "(no state)");
-    safeText("potVal", "0");
-    safeText("streetVal", "unknown");
-    const tb = $("tableBox");
-    if (tb) tb.innerHTML = `<div class="mx-muted">state がありません</div>`;
+// --- minimal table text (safe even if state is null) ---
+function seatLine(s) {
+  const hole = Array.isArray(s.hole) ? s.hole.join(" ") : "(no hole)";
+  return `Seat ${s.i} ${s.name} | stack=${s.stack} bet=${s.bet} | inHand=${!!s.inHand} folded=${!!s.folded} | hole=[${hole}]`;
+}
+
+function renderState() {
+  // update pills
+  $("streetVal").textContent = state?.street ?? "-";
+  $("potVal").textContent = String(state?.pot ?? "-");
+  $("toActVal").textContent =
+    state?.seats?.[state?.toAct]?.name ?? String(state?.toAct ?? "-");
+
+  // table box
+  const box = $("tableBox");
+  if (!box) return;
+
+  if (!state) {
+    box.textContent = "state: (null)\nClick Start Hand";
     return;
   }
 
-  // pot / street
-  safeText("potVal", String(st.pot ?? 0));
-  safeText("streetVal", String(st.street ?? "idle"));
+  const board = Array.isArray(state.community) && state.community.length
+    ? state.community.join(" ")
+    : "(none)";
 
-  // board
-  const board = Array.isArray(st.community) ? st.community.join(" ") : "(none)";
-  safeText("boardVal", board || "(none)");
-
-  // seats
-  const seats = Array.isArray(st.seats) ? st.seats : [];
-  const toAct = st.toAct ?? null;
-
-  const tb = $("tableBox");
-  if (!tb) return;
-
-  tb.innerHTML = seats
-    .map((seat, i) => {
-      const name = escapeHtml(seat?.name ?? `Seat ${i}`);
-      const stack = seat?.stack ?? 0;
-      const bet = seat?.bet ?? 0;
-      const inHand = seat?.inHand ? "IN HAND" : "OUT";
-      const folded = seat?.folded ? "FOLDED" : "";
-      const hole =
-        Array.isArray(seat?.hole) && seat.hole.length
-          ? seat.hole.join(" ")
-          : "(none)";
-      const actMark = i === toAct ? "▶ TO ACT" : "";
-      return `
-        <div class="mx-seat ${i === toAct ? "mx-seat-act" : ""}">
-          <div class="mx-seat-top">
-            <div class="mx-seat-name">${name} ${actMark}</div>
-            <div class="mx-pill">${inHand}</div>
-          </div>
-          <div class="mx-seat-mid">
-            <div>stack: <b>${stack}</b></div>
-            <div>bet: <b>${bet}</b></div>
-            <div class="mx-muted">${folded}</div>
-          </div>
-          <div class="mx-seat-hole">hole: <b>${escapeHtml(hole)}</b></div>
-        </div>
-      `;
-    })
-    .join("");
+  const lines = [];
+  lines.push(`Hand #${state.handNo}`);
+  lines.push(`Street: ${state.street}`);
+  lines.push(`Board: ${board}`);
+  lines.push("");
+  lines.push(...state.seats.map(seatLine));
+  box.textContent = lines.join("\n");
 }
 
-// ---------- actions (wire once) ----------
-function wireEventsOnce() {
-  // 二重登録防止
-  if (window.__mixtableWired) return;
-  window.__mixtableWired = true;
+// PART2 で「状態作成 + アクション + showdown + window公開」を入れます
+// ===============================
+// PART 2/4: create state + core actions + expose
+// ===============================
 
-  $("btnStart")?.addEventListener("click", () => {
-    try {
-      startHand();
-      logLine("Start Hand: OK");
-    } catch (e) {
-      console.error(e);
-      logLine("Start Hand: ERROR");
-    }
-    render();
-  });
-
-  $("btnCall")?.addEventListener("click", () => {
-    try {
-      actCallCheck();
-      logLine("Action: Call/Check");
-    } catch (e) {
-      console.error(e);
-      logLine("Action: Call/Check ERROR");
-    }
-    render();
-  });
-
-  $("btnRaise")?.addEventListener("click", () => {
-    try {
-      actMinRaise();
-      logLine("Action: Min-Raise");
-    } catch (e) {
-      console.error(e);
-      logLine("Action: Min-Raise ERROR");
-    }
-    render();
-  });
-
-  $("btnFold")?.addEventListener("click", () => {
-    try {
-      actFold();
-      logLine("Action: Fold");
-    } catch (e) {
-      console.error(e);
-      logLine("Action: Fold ERROR");
-    }
-    render();
-  });
-
-  $("btnShow")?.addEventListener("click", () => {
-  try {
-    // 1) まず showdown を要求（街が進んでいない/ボード不足でもここから確実に詰める）
-    forceShowdown();
-    logLine("---- SHOWDOWN ----");
-
-    // 2) 念のため state を見て、足りないボードがあれば最後まで進める
-    //    （startHand/actCallCheck/actMinRaise/actFold がある前提）
-    const st = getState?.();
-    const street = st?.street;
-
-    // street が残っているなら、riverまで「Call/Check」を回して進める
-    // preflop/flop/turn/river/showdown など想定
-    let safety = 0;
-    while (safety < 20) {
-      const cur = getState?.();
-      const s = cur?.street;
-
-      if (!s) break;
-      if (s === "showdown" || s === "done") break;
-
-      // 進行を前に進める（最小：Call/Checkで進める）
-      actCallCheck();
-      logLine("Auto: Call/Check to reach showdown");
-      safety++;
-    }
-
-    // 3) もう一度 showdown を確定させる（ここで winners/payout が走るはず）
-    forceShowdown();
-    logLine("---- SHOWDOWN (final) ----");
-  } catch (e) {
-    console.error(e);
-    logLine("Showdown ERROR");
-  }
-  render();
-});
-
-  $("btnDump")?.addEventListener("click", () => {
-    const st = getState?.();
-    console.log("STATE DUMP:", st);
-    logLine("Dumped state to console (F12 Console)");
-    render();
-  });
-
-  $("btnClear")?.addEventListener("click", () => {
-    clearLog();
-    render();
-  });
+// --- create initial test state (必ず動く) ---
+function createInitialState() {
+  state = {
+    handNo: 1,
+    street: "idle", // idle / preflop / flop / turn / river / showdown
+    pot: 0,
+    dealer: 0,
+    sb: 5,
+    bb: 10,
+    toAct: 0,
+    community: [],
+    seats: [
+      { i: 0, name: "YOU", stack: 1000, bet: 0, inHand: true, folded: false, hole: null, lastAction: "" },
+      { i: 1, name: "BOT", stack: 1000, bet: 0, inHand: true, folded: false, hole: null, lastAction: "" },
+    ],
+    lastResult: null,
+  };
 }
 
-// ---------- boot ----------
-window.addEventListener("DOMContentLoaded", () => {
-  ensureUI();
+// --- simple deck ---
+const RANKS = "23456789TJQKA".split("");
+const SUITS = "shdc".split(""); // spade/heart/diamond/club
+function newDeck() {
+  const deck = [];
+  for (const r of RANKS) for (const s of SUITS) deck.push(r + s);
+  // shuffle
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck;
+}
+function dealOne(st) {
+  st._deck ||= newDeck();
+  return st._deck.pop();
+}
+function burn(st) {
+  st._deck ||= newDeck();
+  st._deck.pop();
+}
 
-  try {
-    createInitialState();
-    exposeToWindow();
-  } catch (e) {
-    console.error(e);
-    logLine("Boot ERROR (see console)");
+// --- betting helpers ---
+function resetBets(st) {
+  for (const s of st.seats) s.bet = 0;
+}
+function maxBet(st) {
+  return Math.max(...st.seats.map((s) => s.bet || 0));
+}
+function toCallFor(st, idx) {
+  return Math.max(0, maxBet(st) - (st.seats[idx].bet || 0));
+}
+function collectBetsToPot(st) {
+  for (const s of st.seats) {
+    const b = s.bet || 0;
+    if (b > 0) {
+      st.pot += b;
+      s.bet = 0;
+    }
+  }
+}
+
+// --- start hand (SB/BB + deal hole) ---
+function startHand() {
+  const st = getState();
+  if (!st) return;
+
+  st._deck = newDeck();
+  st.community = [];
+  st.lastResult = null;
+  st.street = "preflop";
+  st.pot = 0;
+
+  // reset seats
+  for (const s of st.seats) {
+    s.inHand = true;
+    s.folded = false;
+    s.bet = 0;
+    s.lastAction = "";
+    s.hole = [dealOne(st), dealOne(st)];
   }
 
-  wireEventsOnce();
-  render();
-});
+  // blinds: heads-up想定（0=SB, 1=BB）
+  const sbSeat = st.seats[0];
+  const bbSeat = st.seats[1];
+
+  const sbPay = Math.min(st.sb, sbSeat.stack);
+  sbSeat.stack -= sbPay;
+  sbSeat.bet += sbPay;
+  sbSeat.lastAction = `SB ${sbPay}`;
+
+  const bbPay = Math.min(st.bb, bbSeat.stack);
+  bbSeat.stack -= bbPay;
+  bbSeat.bet += bbPay;
+  bbSeat.lastAction = `BB ${bbPay}`;
+
+  st.toAct = 0; // HUはSBが最初（簡易）
+  logLine("Start Hand: OK");
+  exposeToWindow();
+}
+
+// --- actions ---
+function actFold() {
+  const st = getState();
+  const p = st.seats[st.toAct];
+  p.folded = true;
+  p.inHand = false;
+  p.lastAction = "Fold";
+  logLine(`Action: Fold (${p.name})`);
+  exposeToWindow();
+}
+
+function actCallCheck() {
+  const st = getState();
+  const p = st.seats[st.toAct];
+  const need = toCallFor(st, st.toAct);
+  const pay = Math.min(need, p.stack);
+  p.stack -= pay;
+  p.bet += pay;
+  p.lastAction = need > 0 ? `Call ${pay}` : "Check";
+  logLine(`Action: Call/Check (${p.name})`);
+  st.toAct = (st.toAct + 1) % st.seats.length;
+  exposeToWindow();
+}
+
+function actMinRaise() {
+  const st = getState();
+  const p = st.seats[st.toAct];
+
+  const mb = maxBet(st);
+  const target = mb + st.bb; // min-raise
+  const need = Math.max(0, target - (p.bet || 0));
+  const pay = Math.min(need, p.stack);
+
+  p.stack -= pay;
+  p.bet += pay;
+  p.lastAction = `Raise ${pay}`;
+
+  logLine(`Action: Min-Raise (${p.name})`);
+  st.toAct = (st.toAct + 1) % st.seats.length;
+  exposeToWindow();
+}
+
+// --- advance street (very simple) ---
+function advanceStreet() {
+  const st = getState();
+  collectBetsToPot(st);
+
+  if (st.street === "preflop") {
+    burn(st);
+    st.community.push(dealOne(st), dealOne(st), dealOne(st));
+    st.street = "flop";
+  } else if (st.street === "flop") {
+    burn(st);
+    st.community.push(dealOne(st));
+    st.street = "turn";
+  } else if (st.street === "turn") {
+    burn(st);
+    st.community.push(dealOne(st));
+    st.street = "river";
+  } else if (st.street === "river") {
+    st.street = "showdown";
+  }
+
+  resetBets(st);
+  st.toAct = 0;
+  logLine(`Advance: ${st.street.toUpperCase()}`);
+  exposeToWindow();
+}
+
+// --- showdown result store (PART3 で UI表示まで完成させる) ---
+function forceShowdown() {
+  const st = getState();
+  if (!st) return;
+
+  // riverまで無ければ配る
+  if (st.street === "idle") return;
+  if (st.street !== "showdown") {
+    while (st.community.length < 5) {
+      if (st.community.length === 0) {
+        burn(st); st.community.push(dealOne(st), dealOne(st), dealOne(st));
+      } else {
+        burn(st); st.community.push(dealOne(st));
+      }
+    }
+    st.street = "showdown";
+    collectBetsToPot(st);
+  }
+
+  // 仮：YOU勝ちにする（PART3で lastResult→LOG に出す）
+  st.lastResult = {
+    winners: ["YOU"],
+    name: "One Pair",
+    payouts: { YOU: st.pot },
+  };
+
+  // pot を配当（簡易）
+  st.seats[0].stack += st.pot;
+  st.pot = 0;
+
+  logLine("---- SHOWDOWN ----");
+  exposeToWindow();
+}
+
+// --- getter/expose ---
+function getState() {
+  return state;
+}
+
+function exposeToWindow() {
+  // 外から確認できるように必ず載せる
+  window.state = state;
+  window.getState = getState;
+
+  // buttons用
+  window.startHand = startHand;
+  window.actFold = actFold;
+  window.actCallCheck = actCallCheck;
+  window.actMinRaise = actMinRaise;
+  window.advanceStreet = advanceStreet;
+  window.forceShowdown = forceShowdown;
+window.getState = getState;
+
+}
