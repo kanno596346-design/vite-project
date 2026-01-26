@@ -1,16 +1,17 @@
 // ===============================
-// MIXTABLE / poker  (single-file working main.js)
-// PART 1/4: UI + logging + safe helpers
+// MIXTABLE / poker  main.js
+// RESULT枠をTABLEの下に追加し、Showdown後に表示する完全版
 // ===============================
 
-// --- small helpers ---
+// --- helper ---
 const $ = (id) => document.getElementById(id);
 
+// --- LOG ---
 let LOG = [];
 function logLine(msg) {
   const s = String(msg);
   LOG.push(s);
-  if (LOG.length > 500) LOG.shift();
+  if (LOG.length > 800) LOG.shift();
   const el = $("logBox");
   if (el) el.textContent = LOG.join("\n");
   console.log(s);
@@ -21,10 +22,12 @@ function clearLog() {
   if (el) el.textContent = "";
 }
 
-// --- state (single source of truth) ---
+// --- STATE ---
 let state = null;
 
-// --- UI: make sure #app exists and render base layout ---
+// ===============================
+// UI SHELL
+// ===============================
 function ensureApp() {
   let app = $("app");
   if (!app) {
@@ -38,6 +41,7 @@ function ensureApp() {
 function renderShell() {
   const app = ensureApp();
 
+  // ★ RESULT枠（id="resultBox"）がTABLEの下に必ず存在する
   app.innerHTML = `
   <style>
     :root{color-scheme:dark}
@@ -53,12 +57,14 @@ function renderShell() {
     .primary{background:#22c55e;border-color:#16a34a;color:#052e16;font-weight:900}
     .warn{background:#fb7185;border-color:#f43f5e;color:#3b0a12;font-weight:900}
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .col{display:flex;flex-direction:column;gap:12px}
     .card{background:#0b1220;border:1px solid #334155;border-radius:14px;overflow:hidden}
     .card h3{margin:0;padding:10px 12px;border-bottom:1px solid #334155;font-size:13px;letter-spacing:.04em;color:#cbd5e1}
     .card .body{padding:12px;white-space:pre-wrap}
-    pre{margin:0;padding:12px;white-space:pre-wrap;min-height:260px;overflow:auto}
+    pre{margin:0;padding:12px;white-space:pre-wrap;min-height:220px;overflow:auto}
     .kv{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:#cbd5e1}
     .pill{border:1px solid #334155;border-radius:999px;padding:6px 10px;background:#020617}
+    #resultBox{min-height:90px}
     @media(max-width:900px){.grid{grid-template-columns:1fr}}
   </style>
 
@@ -68,11 +74,13 @@ function renderShell() {
         <div class="title">MIXTABLE / poker</div>
         <div class="badge">experimental / free / no guarantees · No real money</div>
       </div>
+
       <div class="kv">
         <span class="pill">Street: <b id="streetVal">-</b></span>
         <span class="pill">Pot: <b id="potVal">-</b></span>
         <span class="pill">ToAct: <b id="toActVal">-</b></span>
       </div>
+
       <div class="row">
         <button id="btnStart" class="primary">Start Hand</button>
         <button id="btnCall">Call / Check</button>
@@ -85,10 +93,19 @@ function renderShell() {
     </div>
 
     <div class="grid">
-      <div class="card">
-        <h3>TABLE</h3>
-        <div id="tableBox" class="body"></div>
+      <div class="col">
+        <div class="card">
+          <h3>TABLE</h3>
+          <div id="tableBox" class="body"></div>
+        </div>
+
+        <!-- ★ RESULT枠 -->
+        <div class="card">
+          <h3>RESULT</h3>
+          <pre id="resultBox"></pre>
+        </div>
       </div>
+
       <div class="card">
         <h3>LOG</h3>
         <pre id="logBox"></pre>
@@ -98,20 +115,22 @@ function renderShell() {
   `;
 }
 
-// --- minimal table text (safe even if state is null) ---
+// ===============================
+// RENDER (TABLE / RESULT)
+// ===============================
 function seatLine(s) {
   const hole = Array.isArray(s.hole) ? s.hole.join(" ") : "(no hole)";
   return `Seat ${s.i} ${s.name} | stack=${s.stack} bet=${s.bet} | inHand=${!!s.inHand} folded=${!!s.folded} | hole=[${hole}]`;
 }
 
 function renderState() {
-  // update pills
+  // pills
   $("streetVal").textContent = state?.street ?? "-";
   $("potVal").textContent = String(state?.pot ?? "-");
   $("toActVal").textContent =
     state?.seats?.[state?.toAct]?.name ?? String(state?.toAct ?? "-");
 
-  // table box
+  // table
   const box = $("tableBox");
   if (!box) return;
 
@@ -133,16 +152,38 @@ function renderState() {
   box.textContent = lines.join("\n");
 }
 
-// PART2 で「状態作成 + アクション + showdown + window公開」を入れます
-// ===============================
-// PART 2/4: create state + core actions + expose
-// ===============================
+function renderResult() {
+  const box = $("resultBox");
+  if (!box) return;
 
-// --- create initial test state (必ず動く) ---
+  // resultが無ければ空にする（常に存在はする）
+  if (!state || !state.lastResult) {
+    box.textContent = "";
+    return;
+  }
+
+  const r = state.lastResult;
+  const winners = Array.isArray(r.winners) ? r.winners : [];
+  const name = r.name ?? "";
+  const payouts = r.payouts ?? {};
+
+  const out = [];
+  if (name) out.push(`Hand: ${name}`);
+  out.push(`Winners: ${winners.length ? winners.join(", ") : "(none)"}`);
+  out.push("");
+  out.push("PAYOUT");
+  Object.entries(payouts).forEach(([k, v]) => out.push(`${k}: ${v}`));
+
+  box.textContent = out.join("\n");
+}
+
+// ===============================
+// GAME CORE
+// ===============================
 function createInitialState() {
   state = {
     handNo: 1,
-    street: "idle", // idle / preflop / flop / turn / river / showdown
+    street: "idle",
     pot: 0,
     dealer: 0,
     sb: 5,
@@ -154,16 +195,16 @@ function createInitialState() {
       { i: 1, name: "BOT", stack: 1000, bet: 0, inHand: true, folded: false, hole: null, lastAction: "" },
     ],
     lastResult: null,
+    _deck: null,
   };
 }
 
-// --- simple deck ---
+// --- deck ---
 const RANKS = "23456789TJQKA".split("");
-const SUITS = "shdc".split(""); // spade/heart/diamond/club
+const SUITS = "shdc".split("");
 function newDeck() {
   const deck = [];
   for (const r of RANKS) for (const s of SUITS) deck.push(r + s);
-  // shuffle
   for (let i = deck.length - 1; i > 0; i--) {
     const j = (Math.random() * (i + 1)) | 0;
     [deck[i], deck[j]] = [deck[j], deck[i]];
@@ -180,26 +221,17 @@ function burn(st) {
 }
 
 // --- betting helpers ---
-function resetBets(st) {
-  for (const s of st.seats) s.bet = 0;
-}
-function maxBet(st) {
-  return Math.max(...st.seats.map((s) => s.bet || 0));
-}
-function toCallFor(st, idx) {
-  return Math.max(0, maxBet(st) - (st.seats[idx].bet || 0));
-}
+function resetBets(st) { for (const s of st.seats) s.bet = 0; }
+function maxBet(st) { return Math.max(...st.seats.map((s) => s.bet || 0)); }
+function toCallFor(st, idx) { return Math.max(0, maxBet(st) - (st.seats[idx].bet || 0)); }
 function collectBetsToPot(st) {
   for (const s of st.seats) {
     const b = s.bet || 0;
-    if (b > 0) {
-      st.pot += b;
-      s.bet = 0;
-    }
+    if (b > 0) { st.pot += b; s.bet = 0; }
   }
 }
 
-// --- start hand (SB/BB + deal hole) ---
+// --- start hand ---
 function startHand() {
   const st = getState();
   if (!st) return;
@@ -210,7 +242,6 @@ function startHand() {
   st.street = "preflop";
   st.pot = 0;
 
-  // reset seats
   for (const s of st.seats) {
     s.inHand = true;
     s.folded = false;
@@ -219,26 +250,23 @@ function startHand() {
     s.hole = [dealOne(st), dealOne(st)];
   }
 
-  // blinds: heads-up想定（0=SB, 1=BB）
+  // blinds HU
   const sbSeat = st.seats[0];
   const bbSeat = st.seats[1];
 
   const sbPay = Math.min(st.sb, sbSeat.stack);
   sbSeat.stack -= sbPay;
   sbSeat.bet += sbPay;
-  sbSeat.lastAction = `SB ${sbPay}`;
 
   const bbPay = Math.min(st.bb, bbSeat.stack);
   bbSeat.stack -= bbPay;
   bbSeat.bet += bbPay;
-  bbSeat.lastAction = `BB ${bbPay}`;
 
-  st.toAct = 0; // HUはSBが最初（簡易）
+  st.toAct = 0;
   logLine("Start Hand: OK");
   exposeToWindow();
 }
 
-// --- actions ---
 function actFold() {
   const st = getState();
   const p = st.seats[st.toAct];
@@ -267,211 +295,108 @@ function actMinRaise() {
   const p = st.seats[st.toAct];
 
   const mb = maxBet(st);
-  const target = mb + st.bb; // min-raise
+  const target = mb + st.bb;
   const need = Math.max(0, target - (p.bet || 0));
   const pay = Math.min(need, p.stack);
 
   p.stack -= pay;
   p.bet += pay;
   p.lastAction = `Raise ${pay}`;
-
   logLine(`Action: Min-Raise (${p.name})`);
+
   st.toAct = (st.toAct + 1) % st.seats.length;
   exposeToWindow();
 }
 
-// --- advance street (very simple) ---
-function advanceStreet() {
-  const st = getState();
-  collectBetsToPot(st);
-
-  if (st.street === "preflop") {
-    burn(st);
-    st.community.push(dealOne(st), dealOne(st), dealOne(st));
-    st.street = "flop";
-  } else if (st.street === "flop") {
-    burn(st);
-    st.community.push(dealOne(st));
-    st.street = "turn";
-  } else if (st.street === "turn") {
-    burn(st);
-    st.community.push(dealOne(st));
-    st.street = "river";
-  } else if (st.street === "river") {
-    st.street = "showdown";
-  }
-
-  resetBets(st);
-  st.toAct = 0;
-  logLine(`Advance: ${st.street.toUpperCase()}`);
-  exposeToWindow();
-}
-
-// --- showdown result store (PART3 で UI表示まで完成させる) ---
 function forceShowdown() {
   const st = getState();
-  if (!st) return;
+  if (!st || st.street === "idle") return;
 
-  // riverまで無ければ配る
-  if (st.street === "idle") return;
-  if (st.street !== "showdown") {
-    while (st.community.length < 5) {
-      if (st.community.length === 0) {
-        burn(st); st.community.push(dealOne(st), dealOne(st), dealOne(st));
-      } else {
-        burn(st); st.community.push(dealOne(st));
-      }
+  // boardを5枚に
+  while (st.community.length < 5) {
+    if (st.community.length === 0) {
+      burn(st);
+      st.community.push(dealOne(st), dealOne(st), dealOne(st));
+    } else {
+      burn(st);
+      st.community.push(dealOne(st));
     }
-    st.street = "showdown";
-    collectBetsToPot(st);
   }
 
-  // 仮：YOU勝ちにする（PART3で lastResult→LOG に出す）
+  st.street = "showdown";
+  collectBetsToPot(st);
+
+  // 仮：YOU勝ち（payout表示確認用）
   st.lastResult = {
     winners: ["YOU"],
     name: "One Pair",
     payouts: { YOU: st.pot },
   };
 
-  // pot を配当（簡易）
   st.seats[0].stack += st.pot;
   st.pot = 0;
 
   logLine("---- SHOWDOWN ----");
+  logLine(`Hand: ${st.lastResult.name}`);
+  logLine(`Winners: ${st.lastResult.winners.join(", ")}`);
+  logLine("---- PAYOUT ----");
+  Object.entries(st.lastResult.payouts).forEach(([k, v]) => logLine(`${k}: ${v}`));
+
   exposeToWindow();
 }
 
-// --- getter/expose ---
-function getState() {
-  return state;
-}
-
+// ===============================
+// expose
+// ===============================
+function getState() { return state; }
 function exposeToWindow() {
-  // 外から確認できるように必ず載せる
   window.state = state;
   window.getState = getState;
-
-  // buttons用
   window.startHand = startHand;
   window.actFold = actFold;
   window.actCallCheck = actCallCheck;
   window.actMinRaise = actMinRaise;
-  window.advanceStreet = advanceStreet;
   window.forceShowdown = forceShowdown;
-window.getState = getState;
-
-}
-// ===============================
-// PART 3/4: payouts display + safe showdown printing
-// ===============================
-function showPayoutFromState() {
-  const st = getState?.();
-  if (!st) { logLine("Payout: state missing"); return; }
-
-  const winners =
-    st?.lastResult?.winners ??
-    st?.showdown?.winners ??
-    st?.result?.winners ??
-    st?.winners ??
-    [];
-
-  const name =
-    st?.lastResult?.name ??
-    st?.showdown?.name ??
-    st?.result?.name ??
-    st?.handName ??
-    "";
-
-  const payouts =
-    st?.lastResult?.payouts ??
-    st?.showdown?.payouts ??
-    st?.result?.payouts ??
-    st?.payouts ??
-    null;
-
-  if (name) logLine(`Hand: ${name}`);
-
-  if (Array.isArray(winners) && winners.length > 0) {
-    logLine(`Winners: ${winners.join(", ")}`);
-  } else {
-    logLine("Winners: (none)");
-  }
-
-  if (payouts) {
-    logLine("---- PAYOUT ----");
-    if (Array.isArray(payouts)) {
-      payouts.forEach((p) => logLine(String(p)));
-    } else if (typeof payouts === "object") {
-      Object.entries(payouts).forEach(([k, v]) => logLine(`${k}: ${v}`));
-    } else {
-      logLine(String(payouts));
-    }
-  } else {
-    // 最低限スタック表示
-    if (Array.isArray(st.seats)) {
-      logLine(`Stacks: ${st.seats.map(s => `${s.name ?? s.i ?? "P"}=${s.stack}`).join(" / ")}`);
-    }
-  }
 }
 
-// forceShowdown の後に必ず表示
-const _origForceShowdown = forceShowdown;
-forceShowdown = function patchedForceShowdown() {
-  _origForceShowdown();
-  showPayoutFromState();
-  exposeToWindow(); // 置き換え後を window に反映
-};
-
 // ===============================
-// PART 4/4: wire buttons + boot
+// events
 // ===============================
 function wireEventsOnce() {
   if (window.__mixtableWired) return;
   window.__mixtableWired = true;
 
-  $("btnStart")?.addEventListener("click", () => {
-    try { startHand(); } catch (e) { console.error(e); logLine("Start Hand: ERROR"); }
-    render();
-  });
-
-  $("btnCall")?.addEventListener("click", () => {
-    try { actCallCheck(); } catch (e) { console.error(e); logLine("Call/Check: ERROR"); }
-    render();
-  });
-
-  $("btnRaise")?.addEventListener("click", () => {
-    try { actMinRaise(); } catch (e) { console.error(e); logLine("Min-Raise: ERROR"); }
-    render();
-  });
-
-  $("btnFold")?.addEventListener("click", () => {
-    try { actFold(); } catch (e) { console.error(e); logLine("Fold: ERROR"); }
-    render();
-  });
-
-  $("btnShow")?.addEventListener("click", () => {
-    try { forceShowdown(); } catch (e) { console.error(e); logLine("Showdown: ERROR"); }
-    render();
-  });
+  $("btnStart")?.addEventListener("click", () => { startHand(); render(); });
+  $("btnCall")?.addEventListener("click", () => { actCallCheck(); render(); });
+  $("btnRaise")?.addEventListener("click", () => { actMinRaise(); render(); });
+  $("btnFold")?.addEventListener("click", () => { actFold(); render(); });
+  $("btnShow")?.addEventListener("click", () => { forceShowdown(); render(); });
 
   $("btnDump")?.addEventListener("click", () => {
-    try { console.log("STATE:", getState?.()); logLine("Dumped state to console"); } catch (e) { console.error(e); }
+    console.log("STATE:", getState());
+    logLine("Dumped state to console");
     render();
   });
 
-  $("btnClear")?.addEventListener("click", () => {
-    clearLog();
-    render();
-  });
+  $("btnClear")?.addEventListener("click", () => { clearLog(); render(); });
 }
 
+// ===============================
+// render loop
+// ===============================
 function render() {
-  // shell が無いなら作る
-  if (!$("btnShow") || !$("tableBox") || !$("logBox")) renderShell();
+  // shellが無いなら作る（resultBoxの存在もここで保証される）
+  if (!$("tableBox") || !$("logBox") || !$("resultBox")) {
+    renderShell();
+    wireEventsOnce();
+  }
   renderState();
+  renderResult();
 }
 
+// ===============================
 // boot
+// ===============================
 window.addEventListener("DOMContentLoaded", () => {
   renderShell();
   createInitialState();
