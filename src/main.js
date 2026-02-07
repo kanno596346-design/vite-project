@@ -3,373 +3,219 @@ const $ = (id) => document.getElementById(id);
 let state = null;
 let LOG = [];
 
-function logLine(msg){
+// ---------------- LOG ----------------
+function logLine(msg) {
   LOG.push(String(msg));
   const el = $("logBox");
-  if(el) el.textContent = LOG.join("\n");
+  if (el) el.textContent = LOG.join("\n");
 }
 
-function clearLog(){
-  LOG = [];
-  const el = $("logBox");
-  if(el) el.textContent = "";
+// ---------------- STATE ----------------
+function createInitialState() {
+  state = {
+    street: "idle",
+    pot: 0,
+    toAct: 0,
+    community: [],
+    seats: [
+      { name: "YOU", stack: 1000, hole: [] },
+      { name: "BOT1", stack: 1000, hole: [] },
+      { name: "BOT2", stack: 1000, hole: [] },
+      { name: "BOT3", stack: 1000, hole: [] },
+    ],
+    lastResult: null,
+    deck: []
+  };
 }
 
-function ensureApp(){
-  let el = $("app");
-  if(!el){
-    el = document.createElement("div");
-    el.id = "app";
-    document.body.appendChild(el);
+// ---------------- CARDS ----------------
+const ranks = "23456789TJQKA".split("");
+const suits = "shdc".split("");
+
+function newDeck() {
+  const d = [];
+  for (const r of ranks)
+    for (const s of suits)
+      d.push(r + s);
+  for (let i = d.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    [d[i], d[j]] = [d[j], d[i]];
   }
-  return el;
+  return d;
 }
 
-function renderShell(){
-  const app = ensureApp();
-
-  app.innerHTML = `
-<style>
-body{
-  margin:0;
-  background:#0b1220;
-  color:#e5e7eb;
-  font-family:system-ui;
+function deal(st) {
+  return st.deck.pop();
 }
 
-.wrap{max-width:1000px;margin:20px auto;padding:16px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+// ---------------- GAME ----------------
+function startHand() {
+  state.street = "preflop";
+  state.pot = 0;
+  state.community = [];
+  state.deck = newDeck();
+  state.lastResult = null;
 
-.card{
-  background:#0f172a;
-  border:1px solid #334155;
-  border-radius:16px;
-  padding:14px;
+  state.seats.forEach(s => {
+    s.hole = [deal(state), deal(state)];
+  });
+
+  logLine("Start Hand");
+  render();
 }
 
-.title{font-weight:900;font-size:13px;margin-bottom:10px;color:#94a3b8}
+function forceShowdown() {
+  while (state.community.length < 5) {
+    state.community.push(deal(state));
+  }
 
-.btns button{
-  margin-right:8px;
-  padding:8px 12px;
-  border-radius:10px;
-  background:#1e293b;
-  color:#fff;
-  border:1px solid #334155;
-  cursor:pointer
+  state.street = "showdown";
 
-;
+  state.lastResult = {
+    name: "One Pair",
+    winners: ["YOU"],
+    payouts: { YOU: 50 }
+  };
+
+  logLine("SHOWDOWN");
+  render();
 }
 
-.btnStart{background:#22c55e}
-.btnFold{background:#ef4444}
+// ---------------- BOT ----------------
+function runBots() {
+  for (let i = 1; i < state.seats.length; i++) {
+    if (Math.random() < 0.5)
+      logLine(`${state.seats[i].name}: Check`);
+    else
+      logLine(`${state.seats[i].name}: Call`);
+  }
+}
 
-pre{margin:0;white-space:pre-wrap}
+// ---------------- UI ----------------
+function renderShell() {
+  document.body.innerHTML = `
+  <style>
+    body{margin:0;background:#0b1220;color:#e5e7eb;font-family:system-ui}
+    .wrap{max-width:1000px;margin:20px auto;padding:16px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .card{background:#0f172a;border:1px solid #334155;border-radius:16px;padding:14px}
+    .btn{padding:8px 12px;margin:4px;border-radius:8px;background:#1f2937;color:white;border:none}
+    .cards{display:flex;gap:6px;margin-top:6px}
+    .cardImg{
+      width:40px;height:56px;
+      border-radius:6px;
+      background:white;
+      color:black;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:bold;
+    }
+    .resultWin{
+      background:#1d4ed8;
+      padding:8px;
+      border-radius:8px;
+      margin-top:8px;
+    }
+  </style>
 
-/* ===== RESULTカード ===== */
-.resultCard{display:flex;flex-direction:column;gap:8px}
-.resultHand{font-size:18px;font-weight:900;color:#22c55e}
-.winnerBadge{display:inline-block;background:#2563eb;padding:4px 10px;border-radius:999px;font-size:12px}
-.payoutRow{display:flex;justify-content:space-between;background:#1e293b;padding:6px 10px;border-radius:8px}
-.muted{color:#94a3b8;font-size:12px}
-</style>
+  <div class="wrap">
+    <button class="btn" onclick="startHand()">Start</button>
+    <button class="btn" onclick="forceShowdown()">Showdown</button>
 
-<div class="wrap">
-  <div class="card">
-    <div class="title">MIXTABLE / poker</div>
+    <div class="grid">
+      <div class="card">
+        <div>TABLE</div>
+        <div id="tableBox"></div>
+      </div>
 
-    <div class="btns">
-      <button id="btnStart" class="btnStart">Start Hand</button>
-      <button id="btnCall">Call / Check</button>
-      <button id="btnRaise">Min-Raise</button>
-      <button id="btnFold" class="btnFold">Fold</button>
-      <button id="btnShow">Showdown</button>
-      <button id="btnClear">Clear Log</button>
+      <div class="card">
+        <div>LOG</div>
+        <pre id="logBox"></pre>
+      </div>
     </div>
-
-    <div class="muted">experimental / free / no guarantees · No real money</div>
   </div>
-
-  <div class="grid" style="margin-top:14px">
-    <div class="card">
-      <div class="title">TABLE</div>
-      <pre id="tableBox">(loading...)</pre>
-
-      <div style="height:10px"></div>
-
-      <div class="title">RESULT</div>
-      <div id="resultBox"></div>
-    </div>
-
-    <div class="card">
-      <div class="title">LOG</div>
-      <pre id="logBox"></pre>
-    </div>
-  </div>
-</div>
   `;
 }
 
-// ======================
-// STATE / GAME (簡易)
-// ======================
-
-function createInitialState(){
-  state = {
-    handNo: 1,
-    street: "idle",
-    pot: 0,
-    community: [],
-    seats: [
-      { i:0, name:"YOU", stack:1000, bet:0, inHand:true, folded:false, hole:[], lastAction:"" },
-      { i:1, name:"BOT", stack:1000, bet:0, inHand:true, folded:false, hole:[], lastAction:"" },
-    ],
-    lastResult: null,
-    _deck: null,
-    sb: 5,
-    bb: 10,
-    toAct: 0,
-  };
+function renderCard(c) {
+  return `<div class="cardImg">${c}</div>`;
 }
 
-const RANKS = "23456789TJQKA".split("");
-const SUITS = "shdc".split(""); // spade/heart/diamond/club
-
-function newDeck(){
-  const deck = [];
-  for(const r of RANKS) for(const s of SUITS) deck.push(r+s);
-  for(let i=deck.length-1;i>0;i--){
-    const j = (Math.random()*(i+1))|0;
-    [deck[i],deck[j]]=[deck[j],deck[i]];
-  }
-  return deck;
-}
-function dealOne(st){
-  st._deck ||= newDeck();
-  return st._deck.pop();
-}
-function burn(st){
-  st._deck ||= newDeck();
-  st._deck.pop();
-}
-
-function collectBetsToPot(st){
-  for(const s of st.seats){
-    const b = s.bet||0;
-    if(b>0){ st.pot += b; s.bet=0; }
-  }
-}
-
-function startHand(){
-  const st = state;
-  st.handNo += 1;
-  st.street = "preflop";
-  st.community = [];
-  st.lastResult = null;
-  st.pot = 0;
-  st._deck = newDeck();
-
-  for(const s of st.seats){
-    s.inHand = true;
-    s.folded = false;
-    s.bet = 0;
-    s.hole = [dealOne(st), dealOne(st)];
-    s.lastAction = "";
-  }
-
-  // blinds(簡易)
-  const sbSeat = st.seats[0];
-  const bbSeat = st.seats[1];
-  const sbPay = Math.min(st.sb, sbSeat.stack);
-  const bbPay = Math.min(st.bb, bbSeat.stack);
-  sbSeat.stack -= sbPay; sbSeat.bet += sbPay; sbSeat.lastAction = `SB ${sbPay}`;
-  bbSeat.stack -= bbPay; bbSeat.bet += bbPay; bbSeat.lastAction = `BB ${bbPay}`;
-  st.toAct = 0;
-
-  logLine("Start Hand: OK");
-}
-
-function actCallCheck(){
-  const st = state;
-  const p = st.seats[st.toAct];
-  const maxBet = Math.max(...st.seats.map(s=>s.bet||0));
-  const need = Math.max(0, maxBet - (p.bet||0));
-  const pay = Math.min(need, p.stack);
-  p.stack -= pay;
-  p.bet += pay;
-  p.lastAction = need>0 ? `Call ${pay}` : "Check";
-  logLine(`Action: Call/Check (${p.name})`);
-  st.toAct = (st.toAct+1)%st.seats.length;
-}
-
-function actMinRaise(){
-  const st = state;
-  const p = st.seats[st.toAct];
-  const maxBet = Math.max(...st.seats.map(s=>s.bet||0));
-  const target = maxBet + st.bb;
-  const need = Math.max(0, target - (p.bet||0));
-  const pay = Math.min(need, p.stack);
-  p.stack -= pay;
-  p.bet += pay;
-  p.lastAction = `Raise ${pay}`;
-  logLine(`Action: Min-Raise (${p.name})`);
-  st.toAct = (st.toAct+1)%st.seats.length;
-}
-
-function actFold(){
-  const st = state;
-  const p = st.seats[st.toAct];
-  p.folded = true;
-  p.inHand = false;
-  p.lastAction = "Fold";
-  logLine(`Action: Fold (${p.name})`);
-  st.toAct = (st.toAct+1)%st.seats.length;
-}
-
-function forceShowdown(){
-  const st = state;
-  if(st.street==="idle"){ logLine("Showdown: idle"); return; }
-
-  // riverまで配る
-  while(st.community.length < 5){
-    if(st.community.length===0){
-      burn(st);
-      st.community.push(dealOne(st), dealOne(st), dealOne(st));
-    }else{
-      burn(st);
-      st.community.push(dealOne(st));
-    }
-  }
-
-  st.street = "showdown";
-  collectBetsToPot(st);
-
-  // 仮：YOU勝ち（表示確認が目的
-
-  // 仮：YOU勝ち（表示確認が目的）
-  st.lastResult = {
-    winners: ["YOU"],
-    name: "One Pair",
-    payouts: { YOU: st.pot }
-  };
-
-  st.seats[0].stack += st.pot;
-  st.pot = 0;
-
-  logLine("---- SHOWDOWN ----");
-  logLine(`Hand: ${st.lastResult.name}`);
-  logLine(`Winners: ${st.lastResult.winners.join(", ")}`);
-  logLine("---- PAYOUT ----");
-  Object.entries(st.lastResult.payouts)
-    .forEach(([k,v]) => logLine(`${k}: ${v}`));
-}
-
-// ======================
-// RENDER
-// ======================
-
-function renderTable(){
+function renderTable() {
   const box = $("tableBox");
-  if(!box) return;
+  if (!box) return;
 
-  if(!state){
-    box.textContent = "(no state)";
-    return;
-  }
+  let html = "";
 
-  const board = state.community.length
-    ? state.community.join(" ")
-    : "(none)";
-
-  let out = "";
-  out += `Hand #${state.handNo}\n`;
-  out += `Street: ${state.street}\n`;
-  out += `Board: ${board}\n\n`;
-
-  state.seats.forEach(s=>{
-    const hole = s.hole?.join(" ") || "(no hole)";
-    out += `Seat ${s.i} ${s.name} | stack=${s.stack} | ${hole}\n`;
+  state.seats.forEach(s => {
+    html += `<div>${s.name} (${s.stack})</div>`;
+    html += `<div class="cards">${s.hole.map(renderCard).join("")}</div>`;
   });
 
-  box.textContent = out;
-}
+  html += `<hr>`;
+  html += `<div>Board</div>`;
+  html += `<div class="cards">${state.community.map(renderCard).join("")}</div>`;
 
-function renderResult(){
-  const box = $("resultBox");
-  if(!box) return;
-
-  if(!state || !state.lastResult){
-    box.innerHTML = `<div class="muted">(no result yet)</div>`;
-    return;
+  if (state.lastResult) {
+    html += `
+      <div class="card" style="margin-top:12px">
+        <div>${state.lastResult.name}</div>
+        <div class="resultWin">Winner: ${state.lastResult.winners.join(", ")}</div>
+      </div>
+    `;
   }
 
-  const r = state.lastResult;
-
-  let html = `<div class="resultCard">`;
-  html += `<div class="resultHand">${r.name}</div>`;
-  html += `<div class="winnerBadge">Winner: ${r.winners.join(", ")}</div>`;
-
-  html += `<div style="margin-top:6px;font-size:12px;color:#94a3b8">PAYOUT</div>`;
-
-  for(const [name,amt] of Object.entries(r.payouts)){
-    html += `<div class="payoutRow"><span>${name}</span><span>${amt}</span></div>`;
-  }
-
-  html += `</div>`;
   box.innerHTML = html;
 }
 
-function render(){
+function renderLog() {
+  const el = $("logBox");
+  if (el) el.textContent = LOG.join("\n");
+}
+
+function render() {
+   renderState();
   renderTable();
   renderResult();
-}
+  renderLog();
 
-// ======================
-// EVENTS
-// ======================
+  // BOTの番なら自動行動
+  setTimeout(botAutoAction, 500);
+}}
 
-function wireEventsOnce(){
-  if(window.__wired) return;
-  window.__wired = true;
+// ---------------- BOOT ----------------
+window.startHand = startHand;
+window.forceShowdown = forceShowdown;
 
-  $("btnStart")?.addEventListener("click", ()=>{
-    startHand();
-    render();
-  });
-
-  $("btnCall")?.addEventListener("click", ()=>{
-    actCallCheck();
-    render();
-  });
-
-  $("btnRaise")?.addEventListener("click", ()=>{
-    actMinRaise();
-    render();
-  });
-
-  $("btnFold")?.addEventListener("click", ()=>{
-    actFold();
-    render();
-  });
-
-  $("btnShow")?.addEventListener("click", ()=>{
-    forceShowdown();
-    render();
-  });
-
-  $("btnClear")?.addEventListener("click", ()=>{
-    clearLog();
-    render();
-  });
-}
-
-// ======================
-// BOOT
-// ======================
-
-window.addEventListener("DOMContentLoaded", ()=>{
+window.onload = () => {
   renderShell();
   createInitialState();
-  wireEventsOnce();
   render();
-});
+};
+// -----------------------
+// BOT AUTO ACTION
+// -----------------------
+function botAutoAction() {
+  const st = state;
+  if (!st) return;
+
+  const seat = st.seats[st.toAct];
+  if (!seat) return;
+
+  // BOTの番だけ動く
+  if (seat.name !== "BOT") return;
+
+  // ランダム行動
+  const r = Math.random();
+
+  if (r < 0.15) {
+    actFold();
+  } else if (r < 0.75) {
+    actCallCheck();
+  } else {
+    actMinRaise();
+  }
+
+  render();
+}
