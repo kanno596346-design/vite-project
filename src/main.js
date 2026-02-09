@@ -106,6 +106,8 @@ pre{margin:0;white-space:pre-wrap}
       <button id="btnRaise">Min-Raise</button>
       <button id="btnFold" class="btnFold">Fold</button>
       <button id="btnShow">Showdown</button>
+      <button id="btnAutoOn">Auto BOT ON</button>
+<button id="btnAutoOff">Auto BOT OFF</button>
       <button id="btnClear">Clear Log</button>
     </div>
 
@@ -355,7 +357,16 @@ function render(){
 // ======================
 // EVENTS
 // ======================
-function wireEventsOnce(){
+function wireEventsOnce(){  $("btnAutoOn")?.addEventListener("click", ()=>{
+    startAutoBot();
+    render();
+  });
+
+  $("btnAutoOff")?.addEventListener("click", ()=>{
+    stopAutoBot();
+    render();
+  });
+
   if(window.__wired) return;
   window.__wired = true;
 
@@ -366,6 +377,61 @@ function wireEventsOnce(){
   $("btnShow")?.addEventListener("click", ()=>{ forceShowdown(); render(); });
   $("btnClear")?.addEventListener("click", ()=>{ clearLog(); render(); });
 }
+// ======================
+// BOT AUTO ACTION
+// ======================
+
+let BOT_TIMER = null;
+
+function isBotTurn() {
+  return state && state.seats && state.seats[state.toAct] && state.seats[state.toAct].name === "BOT";
+}
+
+function botDecideAndAct() {
+  if (!state) return;
+  if (!isBotTurn()) return;
+
+  // ざっくり確率で行動（あとで強化できる）
+  const r = Math.random();
+
+  // まずフォールドしないようにする（デモ用）
+  // 0.70: Call/Check, 0.25: MinRaise, 0.05: Fold
+  try {
+    if (r < 0.70) {
+      actCallCheck();
+      logLine("BOT: Call/Check");
+    } else if (r < 0.95) {
+      actMinRaise();
+      logLine("BOT: Min-Raise");
+    } else {
+      actFold();
+      logLine("BOT: Fold");
+    }
+  } catch (e) {
+    console.error(e);
+    logLine("BOT: ERROR");
+  }
+
+  render();
+}
+
+// 一定間隔で「BOTの番なら動かす」
+function startAutoBot() {
+  if (BOT_TIMER) return;
+  BOT_TIMER = setInterval(() => {
+    // BOTの番じゃなければ何もしない
+    if (!isBotTurn()) return;
+    botDecideAndAct();
+  }, 700); // 0.7秒ごと
+  logLine("AUTO BOT: ON");
+}
+
+function stopAutoBot() {
+  if (BOT_TIMER) clearInterval(BOT_TIMER);
+  BOT_TIMER = null;
+  logLine("AUTO BOT: OFF");
+}
+
 
 // ======================
 // BOOT
